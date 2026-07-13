@@ -23,7 +23,7 @@
           <tr v-for="a in applications" :key="a.id">
             <td>{{ a.student_name }}</td>
             <td>{{ a.job_title }}</td>
-            <td>{{ formatDate(a.application_date) }}</td>
+            <td>{{ formatDateTime(a.application_date) }}</td>
             <td><StatusBadge :status="a.status" /></td>
             <td class="text-end"><button class="btn btn-sm btn-outline-secondary" @click="openView(a)">View</button></td>
           </tr>
@@ -38,29 +38,57 @@
           <div class="col-md-3"><div class="text-muted small">Student</div><div class="fw-semibold">{{ detail.student_name }}</div></div>
           <div class="col-md-3"><div class="text-muted small">Branch</div><div class="fw-semibold">{{ detail.student_branch || '—' }}</div></div>
           <div class="col-md-2"><div class="text-muted small">CGPA</div><div class="fw-semibold">{{ detail.student_cgpa }}</div></div>
-          <div class="col-md-4"><div class="text-muted small">Resume</div><div class="fw-semibold">{{ detail.has_resume ? 'Available' : 'Not uploaded' }}</div></div>
+          <div class="col-md-4">
+            <div class="text-muted small">Resume</div>
+            <button v-if="detail.has_resume" class="btn btn-sm btn-outline-secondary mt-1" @click="downloadFile(`/company/applications/${detail.id}/resume`, 'resume.pdf')">Download Resume</button>
+            <div v-else class="fw-semibold">Not uploaded</div>
+          </div>
         </div>
 
         <PipelineGraph :status="detail.status" :interviews="detail.interviews" :has-placement="!!detail.placement" />
 
+        <div class="mt-4" v-if="detail.feedback">
+          <div class="alert alert-secondary py-2 mb-0">{{ detail.feedback }}</div>
+        </div>
+
         <div class="d-flex flex-wrap gap-2 mt-4">
           <button v-if="detail.status === 'APPLIED'" class="btn btn-sm btn-primary" @click="setStatus('SHORTLISTED')">Shortlist</button>
           <button v-if="detail.status === 'SHORTLISTED'" class="btn btn-sm btn-primary" @click="setStatus('INTERVIEW')">Move to Interview</button>
-          <button v-if="detail.status === 'INTERVIEW'" class="btn btn-sm btn-primary" @click="setStatus('OFFER')">Move to Offer</button>
-          <button v-if="detail.status === 'INTERVIEW'" class="btn btn-sm btn-outline-primary" @click="scheduleOpen = true">Schedule Interview</button>
-          <button v-if="detail.status === 'OFFER'" class="btn btn-sm btn-outline-primary" @click="offerOpen = true">Make an Offer</button>
+          <template v-if="detail.status === 'INTERVIEW'">
+            <button class="btn btn-sm btn-outline-primary" @click="scheduleOpen = true">Schedule Interview</button>
+            <button class="btn btn-sm btn-primary" @click="openOffer">Make an Offer</button>
+          </template>
+          <button v-if="['OFFER', 'PLACED'].includes(detail.status)" class="btn btn-sm btn-outline-secondary" @click="viewOfferOpen = true">View Offer</button>
           <button v-if="['APPLIED','SHORTLISTED','INTERVIEW','OFFER'].includes(detail.status)" class="btn btn-sm btn-outline-danger" @click="setStatus('REJECTED')">Reject</button>
         </div>
 
         <div class="mt-4" v-if="detail.interviews.length">
           <div class="text-muted small mb-2">Interviews</div>
-          <ul class="list-unstyled mb-0">
-            <li v-for="iv in detail.interviews" :key="iv.id">
-              {{ formatDate(iv.scheduled_date_time) }} — {{ iv.interviewer_name }}
-              <a v-if="iv.meeting_link" :href="iv.meeting_link" target="_blank" class="ms-1">Join link</a>
-            </li>
-          </ul>
+          <table class="table pp-table table-sm mb-0">
+            <thead>
+              <tr><th>Scheduled</th><th>Interviewer</th><th>Notes</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="iv in detail.interviews" :key="iv.id">
+                <td>{{ formatDateTime(iv.scheduled_date_time) }}</td>
+                <td>{{ iv.interviewer_name }}</td>
+                <td>{{ iv.notes || '—' }}</td>
+                <td><StatusBadge :status="iv.status" /></td>
+                <td><a v-if="iv.meeting_link" :href="iv.meeting_link" target="_blank" class="btn btn-sm btn-outline-primary">Join Call</a></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </div>
+    </Modal>
+
+    <Modal v-model="viewOfferOpen" title="Offer Details">
+      <div v-if="detail">
+        <div class="row g-2 small mb-3">
+          <div class="col-6"><span class="text-muted">Offered Salary:</span> {{ detail.offered_salary }}</div>
+          <div class="col-6"><span class="text-muted">Joining Date:</span> {{ formatDate(detail.offered_joining_date) }}</div>
+        </div>
+        <button v-if="detail.has_offer_letter" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/company/applications/${detail.id}/offer-letter`, 'offer_letter.pdf')">Download Offer Letter</button>
       </div>
     </Modal>
 
@@ -72,11 +100,15 @@
         </div>
         <div class="col-12">
           <label class="form-label">Date & Time</label>
-          <input v-model="scheduleForm.scheduled_date_time" type="datetime-local" class="form-control" required />
+          <input v-model="scheduleForm.scheduled_date_time" type="datetime-local" class="form-control" :min="minDateTimeLocal" required />
         </div>
         <div class="col-12">
           <label class="form-label">Meeting Link</label>
           <input v-model="scheduleForm.meeting_link" type="url" class="form-control" placeholder="https://" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Notes</label>
+          <textarea v-model="scheduleForm.notes" class="form-control" rows="2"></textarea>
         </div>
         <div class="col-12">
           <button type="submit" class="btn btn-primary">Schedule</button>
@@ -92,7 +124,7 @@
         </div>
         <div class="col-12">
           <label class="form-label">Projected Joining Date</label>
-          <input v-model="offerForm.joining_date" type="date" class="form-control" required />
+          <input v-model="offerForm.joining_date" type="date" class="form-control" :min="minDate" required />
         </div>
         <div class="col-12">
           <label class="form-label">Offer Letter (PDF)</label>
@@ -115,6 +147,8 @@ import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import PipelineGraph from '@/components/shared/PipelineGraph.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDate, formatDateTime, nowForDateTimeLocal, todayForDateInput } from '@/utils/date'
+import { downloadFile } from '@/utils/download'
 
 const applications = ref([])
 const driveOptions = ref([])
@@ -123,19 +157,18 @@ const driveIds = ref([])
 const driveState = ref('')
 
 const viewOpen = ref(false)
+const viewOfferOpen = ref(false)
 const detail = ref(null)
 
+const minDateTimeLocal = nowForDateTimeLocal()
+const minDate = todayForDateInput()
+
 const scheduleOpen = ref(false)
-const scheduleForm = ref({ interviewer_name: '', scheduled_date_time: '', meeting_link: '' })
+const scheduleForm = ref({ interviewer_name: '', scheduled_date_time: '', meeting_link: '', notes: '' })
 
 const offerOpen = ref(false)
 const offerForm = ref({ salary_offered: null, joining_date: '' })
 let offerFile = null
-
-// Formats an ISO date string for display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
 
 // Fetches the company's applications for the active search/filter state.
 async function load() {
@@ -172,8 +205,15 @@ async function setStatus(status) {
 async function submitSchedule() {
   await api.post(`/company/applications/${detail.value.id}/schedule-interview`, scheduleForm.value)
   scheduleOpen.value = false
-  scheduleForm.value = { interviewer_name: '', scheduled_date_time: '', meeting_link: '' }
+  scheduleForm.value = { interviewer_name: '', scheduled_date_time: '', meeting_link: '', notes: '' }
   await openView({ id: detail.value.id })
+}
+
+// Opens the make-an-offer form with a blank state.
+function openOffer() {
+  offerForm.value = { salary_offered: null, joining_date: '' }
+  offerFile = null
+  offerOpen.value = true
 }
 
 // Captures the selected offer letter PDF file.
@@ -191,8 +231,6 @@ async function submitOffer() {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   offerOpen.value = false
-  offerForm.value = { salary_offered: null, joining_date: '' }
-  offerFile = null
   await openView({ id: detail.value.id })
   await load()
 }

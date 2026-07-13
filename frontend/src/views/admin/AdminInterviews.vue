@@ -22,6 +22,7 @@
             <th>Company</th>
             <th>Scheduled</th>
             <th>Interviewer</th>
+            <th>Notes</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -30,11 +31,12 @@
             <td>{{ iv.student_name }}</td>
             <td>{{ iv.job_title }}</td>
             <td>{{ iv.company_name }}</td>
-            <td>{{ formatDate(iv.scheduled_date_time) }}</td>
+            <td>{{ formatDateTime(iv.scheduled_date_time) }}</td>
             <td>{{ iv.interviewer_name || '—' }}</td>
+            <td>{{ iv.notes || '—' }}</td>
             <td><StatusBadge :status="iv.status" /></td>
           </tr>
-          <tr v-if="!interviews.length"><td colspan="6" class="text-center text-muted py-4">No interviews found.</td></tr>
+          <tr v-if="!interviews.length"><td colspan="7" class="text-center text-muted py-4">No interviews found.</td></tr>
         </tbody>
       </table>
     </div>
@@ -47,16 +49,12 @@ import AppLayout from '@/components/shared/AppLayout.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDateTime } from '@/utils/date'
 
 const interviews = ref([])
 const driveOrCompany = ref('')
 const studentName = ref('')
 const sort = ref('newest')
-
-// Formats an ISO date string for display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
 
 // Fetches the interview log for the active search/sort state.
 async function load() {

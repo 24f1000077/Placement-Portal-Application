@@ -1,13 +1,13 @@
 <template>
   <!-- Renders the single global header bar shared by every role. -->
   <nav class="navbar navbar-expand-md pp-header sticky-top">
-    <div class="container-fluid px-3 px-md-4">
+    <div class="container-fluid px-3 px-md-4 pp-header-row">
       <span class="navbar-brand pp-brand">PlacementPro</span>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#ppNav">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="ppNav">
-        <ul class="navbar-nav me-auto pp-tabs">
+        <ul class="navbar-nav mx-md-auto pp-tabs pp-tabs-centered">
           <li class="nav-item" v-for="tab in tabs" :key="tab.path">
             <router-link class="nav-link" :class="{ active: isActive(tab.path) }" :to="tab.path">
               {{ tab.label }}
@@ -81,12 +81,26 @@ function onLogout() {
   letter-spacing: 0.02em;
   margin-right: 2rem;
 }
+.pp-header-row {
+  position: relative;
+}
+.pp-tabs .nav-item {
+  margin: 0 0.15rem;
+}
 .pp-tabs .nav-link {
   color: rgba(255, 255, 255, 0.78);
   font-weight: 500;
-  padding: 0.5rem 0.9rem;
+  padding: 0.6rem 1.1rem;
   border-radius: 6px;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+@media (min-width: 768px) {
+  .pp-tabs-centered {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
 }
 .pp-tabs .nav-link:hover {
   color: #fff;

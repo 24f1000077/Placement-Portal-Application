@@ -1,6 +1,6 @@
 <template>
   <!-- Renders a color-coded pill for the given status value. -->
-  <span class="pp-badge" :class="badgeClass">{{ status }}</span>
+  <span class="pp-badge" :class="badgeClass">{{ displayText }}</span>
 </template>
 
 <script setup>
@@ -16,10 +16,12 @@ const MAP = {
   REJECTED: 'pp-badge-rejected',
   WITHDRAWN: 'pp-badge-rejected',
   BLACKLISTED: 'pp-badge-blacklisted',
-  CLOSED: 'pp-badge-closed',
+  APPLICATIONS_CLOSED: 'pp-badge-closed',
   CANCELLED: 'pp-badge-cancelled',
 }
 
 // Resolves the badge color class for the current status.
 const badgeClass = computed(() => MAP[props.status] || 'pp-badge-closed')
+// Replaces underscores with spaces for display.
+const displayText = computed(() => props.status.replace(/_/g, ' '))
 </script>

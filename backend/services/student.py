@@ -9,7 +9,7 @@ from flask_jwt_extended import get_jwt_identity
 
 import config
 from models import (
-    db, User, StudentProfile,
+    db, User, StudentProfile, CompanyProfile,
     PlacementDrive, PlacementDriveStatus,
     Application, ApplicationStatus,
     Placement,
@@ -32,14 +32,19 @@ def current_student():
     return user.student_profile
 
 
-def is_eligible(student, drive):
+def ineligibility_reasons(student, drive):
+    reasons = []
     if drive.allowed_branches and student.branch_id not in [b.id for b in drive.allowed_branches]:
-        return False
+        reasons.append(f'This drive is open to {", ".join(b.name for b in drive.allowed_branches)} only.')
     if drive.target_year and student.graduation_year != drive.target_year:
-        return False
+        reasons.append(f'This drive targets the {drive.target_year} graduating batch; you are graduating in {student.graduation_year}.')
     if drive.cgpa and student.cgpa < drive.cgpa:
-        return False
-    return True
+        reasons.append(f'This drive requires a minimum CGPA of {drive.cgpa}; your CGPA is {student.cgpa}.')
+    return reasons
+
+
+def is_eligible(student, drive):
+    return not ineligibility_reasons(student, drive)
 
 
 # ---- Placement Drives ----
@@ -72,16 +77,27 @@ def list_drives():
 
     results = []
     for drive in q.order_by(PlacementDrive.created_at.desc()).all():
-        eligible = is_eligible(student, drive)
-        if eligible_only and not eligible:
+        reasons = ineligibility_reasons(student, drive)
+        if eligible_only and reasons:
             continue
         deadline_passed = bool(drive.application_deadline and drive.application_deadline <= datetime.now(timezone.utc).replace(tzinfo=drive.application_deadline.tzinfo))
         payload = drive_to_dict(drive, include_applicant_count=False)
-        payload['eligible'] = eligible
+        payload['eligible'] = not reasons
+        payload['ineligibility_reasons'] = reasons
         payload['already_applied'] = drive.id in applied_drive_ids
         payload['deadline_passed'] = deadline_passed
         results.append(payload)
     return jsonify({'count': len(results), 'results': results})
+
+
+@student_bp.route('/companies', methods=['GET'])
+@role_required('STUDENT')
+def list_companies_with_drives():
+    companies = (CompanyProfile.query
+                 .join(PlacementDrive, PlacementDrive.company_id == CompanyProfile.id)
+                 .filter(PlacementDrive.status == PlacementDriveStatus.APPROVED)
+                 .distinct().order_by(CompanyProfile.company_name).all())
+    return jsonify([{'id': c.id, 'name': c.company_name} for c in companies])
 
 
 @student_bp.route('/drives/<int:drive_id>/apply', methods=['POST'])
@@ -115,8 +131,12 @@ def list_applications():
     statuses = [s for s in request.args.get('status', '').split(',') if s]
     if statuses:
         q = q.filter(Application.status.in_([ApplicationStatus[s] for s in statuses if s in ApplicationStatus.__members__]))
-    applications = q.order_by(Application.id.desc()).all()
-    return jsonify({'count': len(applications), 'results': [application_to_dict(a, include_interviews=False) for a in applications]})
+    applications = q.order_by(Application.application_date.desc()).all()
+    results = [application_to_dict(a, include_interviews=False) for a in applications]
+    search = request.args.get('search', '').strip().lower()
+    if search:
+        results = [r for r in results if search in r['company_name'].lower() or search in r['job_title'].lower()]
+    return jsonify({'count': len(results), 'results': results})
 
 
 @student_bp.route('/applications/<int:application_id>', methods=['GET'])
@@ -163,16 +183,14 @@ def accept_offer(application_id):
     return jsonify(application_to_dict(application))
 
 
-@student_bp.route('/applications/<int:application_id>/reject-offer', methods=['POST'])
+@student_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
 @role_required('STUDENT')
-def reject_offer(application_id):
+def download_offer_letter(application_id):
     student = current_student()
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
-    if application.status != ApplicationStatus.OFFER:
-        return error('Only applications in the Offer stage can be rejected.')
-    application.status = ApplicationStatus.REJECTED
-    db.session.commit()
-    return jsonify(application_to_dict(application))
+    if not application.offer_letter:
+        return error('No offer letter uploaded yet.', 404)
+    return send_file(io.BytesIO(application.offer_letter), mimetype='application/pdf', download_name='offer_letter.pdf')
 
 
 # ---- Profile ----

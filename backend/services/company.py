@@ -1,6 +1,7 @@
 import re
+import io
 from datetime import datetime, timezone, date
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import get_jwt_identity
 
 from models import (
@@ -20,7 +21,6 @@ PHONE_RE = re.compile(r'^\d{7,15}$')
 NEXT_STAGE = {
     ApplicationStatus.APPLIED: ApplicationStatus.SHORTLISTED,
     ApplicationStatus.SHORTLISTED: ApplicationStatus.INTERVIEW,
-    ApplicationStatus.INTERVIEW: ApplicationStatus.OFFER,
 }
 
 
@@ -208,7 +208,7 @@ def close_drive(drive_id):
         return error('Drive not found.', 404)
     if drive.status != PlacementDriveStatus.APPROVED:
         return error('Only approved drives can be closed.')
-    drive.status = PlacementDriveStatus.CLOSED
+    drive.status = PlacementDriveStatus.APPLICATIONS_CLOSED
     db.session.commit()
     cache.clear()
     return jsonify(drive_to_dict(drive))
@@ -226,6 +226,7 @@ def cancel_drive(drive_id):
     for application in drive.applications:
         if application.status in (ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER):
             application.status = ApplicationStatus.REJECTED
+            application.feedback = 'Automatically rejected: the placement drive was cancelled.'
     db.session.commit()
     cache.clear()
     return jsonify(drive_to_dict(drive))
@@ -246,7 +247,7 @@ def list_applications():
     if open_closed == 'open':
         q = q.filter(PlacementDrive.status == PlacementDriveStatus.APPROVED)
     elif open_closed == 'closed':
-        q = q.filter(PlacementDrive.status.in_([PlacementDriveStatus.CLOSED, PlacementDriveStatus.CANCELLED]))
+        q = q.filter(PlacementDrive.status.in_([PlacementDriveStatus.APPLICATIONS_CLOSED, PlacementDriveStatus.CANCELLED]))
     applications = q.order_by(Application.id.desc()).all()
     results = [application_to_dict(a, include_interviews=False) for a in applications]
     if search:
@@ -302,6 +303,7 @@ def schedule_interview(application_id):
         scheduled_date_time=scheduled,
         interviewer_name=data['interviewer_name'].strip(),
         meeting_link=data.get('meeting_link'),
+        notes=data.get('notes'),
         status=InterviewStatus.SCHEDULED,
     )
     db.session.add(interview)
@@ -315,8 +317,8 @@ def make_offer(application_id):
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
-    if application.status != ApplicationStatus.OFFER:
-        return error('An offer can only be made once the candidate reaches the Offer stage.')
+    if application.status != ApplicationStatus.INTERVIEW:
+        return error('An offer can only be made once the candidate reaches the Interview stage.')
 
     offer_letter_b64 = None
     salary = None
@@ -347,8 +349,31 @@ def make_offer(application_id):
     application.offered_joining_date = joining
     if offer_letter_b64:
         application.offer_letter = offer_letter_b64
+    application.status = ApplicationStatus.OFFER
     db.session.commit()
     return jsonify(application_to_dict(application))
+
+
+@company_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
+@role_required('COMPANY')
+def download_offer_letter(application_id):
+    application = own_application_or_404(application_id)
+    if not application:
+        return error('Application not found.', 404)
+    if not application.offer_letter:
+        return error('No offer letter uploaded yet.', 404)
+    return send_file(io.BytesIO(application.offer_letter), mimetype='application/pdf', download_name='offer_letter.pdf')
+
+
+@company_bp.route('/applications/<int:application_id>/resume', methods=['GET'])
+@role_required('COMPANY')
+def download_candidate_resume(application_id):
+    application = own_application_or_404(application_id)
+    if not application:
+        return error('Application not found.', 404)
+    if not application.student.resume:
+        return error('No resume uploaded yet.', 404)
+    return send_file(io.BytesIO(application.student.resume), mimetype='application/pdf', download_name='resume.pdf')
 
 
 # ---- Interviews ----

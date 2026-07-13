@@ -121,7 +121,7 @@ def run():
 
         d_swe = make_drive(acme, 'Software Engineer', PlacementDriveStatus.APPROVED, 7.0, 2027, ['Computer Science', 'Information Technology'], 30, 'Python, React, SQL', 1200000)
         d_data = make_drive(acme, 'Data Analyst', PlacementDriveStatus.PENDING, 6.5, 2028, ['Computer Science'], 25, 'SQL, Excel', 900000)
-        d_devops = make_drive(acme, 'DevOps Engineer', PlacementDriveStatus.CLOSED, 7.5, 2027, ['Computer Science', 'Information Technology'], 10, 'Docker, AWS', 1100000)
+        d_devops = make_drive(acme, 'DevOps Engineer', PlacementDriveStatus.APPLICATIONS_CLOSED, 7.5, 2027, ['Computer Science', 'Information Technology'], 10, 'Docker, AWS', 1100000)
         d_intern = make_drive(acme, 'Software Intern', PlacementDriveStatus.CANCELLED, 6.0, 2026, ['Computer Science'], 15, 'Python', 400000)
         d_backend = make_drive(acme, 'Backend Developer', PlacementDriveStatus.REJECTED, 7.0, 2027, ['Computer Science'], 20, 'Node.js', 1000000)
         d_pm = make_drive(beta, 'Product Manager', PlacementDriveStatus.APPROVED, 8.0, 2027, ['Computer Science', 'Information Technology', 'Electronics & Communication'], 40, 'Product Strategy', 1500000)

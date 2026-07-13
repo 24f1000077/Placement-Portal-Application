@@ -5,15 +5,15 @@
       {{ label }}<span v-if="modelValue.length" class="badge text-bg-secondary ms-1">{{ modelValue.length }}</span>
     </button>
     <ul class="dropdown-menu p-2 pp-dropdown-menu">
-      <li v-for="opt in options" :key="optionValue(opt)" class="form-check px-2">
+      <li v-for="opt in options" :key="optionValue(opt)" class="d-flex align-items-center gap-2 px-2 py-1">
         <input
-          class="form-check-input"
+          class="form-check-input m-0 flex-shrink-0"
           type="checkbox"
           :id="`opt-${label}-${optionValue(opt)}`"
           :checked="modelValue.includes(optionValue(opt))"
           @change="toggle(optionValue(opt))"
         />
-        <label class="form-check-label" :for="`opt-${label}-${optionValue(opt)}`">{{ optionLabel(opt) }}</label>
+        <label class="form-check-label mb-0" :for="`opt-${label}-${optionValue(opt)}`">{{ optionLabel(opt) }}</label>
       </li>
     </ul>
   </div>

@@ -16,17 +16,18 @@
     <div class="pp-card">
       <table class="table pp-table mb-0 align-middle">
         <thead>
-          <tr><th>Candidate</th><th>Drive</th><th>Scheduled</th><th>Interviewer</th><th>Status</th></tr>
+          <tr><th>Candidate</th><th>Drive</th><th>Scheduled</th><th>Interviewer</th><th>Notes</th><th>Status</th></tr>
         </thead>
         <tbody>
           <tr v-for="iv in interviews" :key="iv.id">
             <td>{{ iv.student_name }}</td>
             <td>{{ iv.job_title }}</td>
-            <td>{{ formatDate(iv.scheduled_date_time) }}</td>
+            <td>{{ formatDateTime(iv.scheduled_date_time) }}</td>
             <td>{{ iv.interviewer_name || '—' }}</td>
+            <td>{{ iv.notes || '—' }}</td>
             <td><StatusBadge :status="iv.status" /></td>
           </tr>
-          <tr v-if="!interviews.length"><td colspan="5" class="text-center text-muted py-4">No interviews scheduled.</td></tr>
+          <tr v-if="!interviews.length"><td colspan="6" class="text-center text-muted py-4">No interviews scheduled.</td></tr>
         </tbody>
       </table>
     </div>
@@ -40,17 +41,13 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDateTime } from '@/utils/date'
 
 const interviews = ref([])
 const driveOptions = ref([])
 const driveIds = ref([])
 const studentName = ref('')
 const sort = ref('newest')
-
-// Formats an ISO date string for display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
 
 // Fetches the interview list for the active filter/sort state.
 async function load() {

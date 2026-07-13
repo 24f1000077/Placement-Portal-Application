@@ -1,5 +1,5 @@
 <template>
-  <!-- Renders the admin applications table with a single unified view/action panel. -->
+  <!-- Renders the admin applications table with a single unified read-only view panel. -->
   <AppLayout>
     <h1 class="h4 mb-4">Applications</h1>
 
@@ -28,7 +28,7 @@
             <td>{{ a.student_name }}</td>
             <td>{{ a.company_name }}</td>
             <td>{{ a.job_title }}</td>
-            <td>{{ formatDate(a.application_date) }}</td>
+            <td>{{ formatDateTime(a.application_date) }}</td>
             <td><StatusBadge :status="a.status" /></td>
             <td class="text-end"><button class="btn btn-sm btn-outline-secondary" @click="openView(a)">View</button></td>
           </tr>
@@ -48,26 +48,30 @@
 
         <PipelineGraph :status="detail.status" :interviews="detail.interviews" :has-placement="!!detail.placement" />
 
-        <div class="mt-4">
-          <div class="text-muted small mb-2">Update Pipeline Stage</div>
-          <div class="d-flex flex-wrap gap-2">
-            <button
-              v-for="s in MILESTONE_OPTIONS"
-              :key="s"
-              class="btn btn-sm"
-              :class="detail.status === s ? 'btn-primary' : 'btn-outline-secondary'"
-              @click="setStatus(s)"
-            >{{ s }}</button>
-          </div>
+        <div class="mt-4" v-if="detail.feedback">
+          <div class="alert alert-secondary py-2 mb-0">{{ detail.feedback }}</div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <button v-if="detail.has_resume" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/admin/applications/${detail.id}/resume`, 'resume.pdf')">View Resume</button>
+          <button v-if="detail.has_offer_letter" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/admin/applications/${detail.id}/offer-letter`, 'offer_letter.pdf')">View Offer Letter</button>
         </div>
 
         <div class="mt-4" v-if="detail.interviews.length">
           <div class="text-muted small mb-2">Interviews</div>
-          <ul class="list-unstyled">
-            <li v-for="iv in detail.interviews" :key="iv.id" class="mb-1">
-              {{ formatDate(iv.scheduled_date_time) }} — {{ iv.interviewer_name || 'Unassigned' }} ({{ iv.status }})
-            </li>
-          </ul>
+          <table class="table pp-table table-sm mb-0">
+            <thead>
+              <tr><th>Scheduled</th><th>Interviewer</th><th>Notes</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="iv in detail.interviews" :key="iv.id">
+                <td>{{ formatDateTime(iv.scheduled_date_time) }}</td>
+                <td>{{ iv.interviewer_name || 'Unassigned' }}</td>
+                <td>{{ iv.notes || '—' }}</td>
+                <td><StatusBadge :status="iv.status" /></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </Modal>
@@ -83,9 +87,10 @@ import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import PipelineGraph from '@/components/shared/PipelineGraph.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDateTime } from '@/utils/date'
+import { downloadFile } from '@/utils/download'
 
 const STATUS_OPTIONS = ['APPLIED', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'PLACED', 'REJECTED', 'WITHDRAWN']
-const MILESTONE_OPTIONS = ['APPLIED', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'PLACED', 'REJECTED']
 
 const applications = ref([])
 const companyOptions = ref([])
@@ -97,11 +102,6 @@ const statuses = ref([])
 
 const viewOpen = ref(false)
 const detail = ref(null)
-
-// Formats an ISO date string for display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
 
 // Fetches the application list for the active search/filter state.
 async function load() {
@@ -129,17 +129,10 @@ onMounted(async () => {
   await load()
 })
 
-// Opens the unified detail/action panel for an application.
+// Opens the unified read-only detail panel for an application.
 async function openView(application) {
   const { data } = await api.get(`/admin/applications/${application.id}`)
   detail.value = data
   viewOpen.value = true
-}
-
-// Updates the application's pipeline status.
-async function setStatus(status) {
-  const { data } = await api.patch(`/admin/applications/${detail.value.id}/status`, { status })
-  detail.value = data
-  await load()
 }
 </script>

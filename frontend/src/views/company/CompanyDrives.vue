@@ -24,14 +24,14 @@
           <tr v-for="d in drives" :key="d.id">
             <td>{{ d.job_title }}</td>
             <td>{{ d.target_year }}</td>
-            <td>{{ formatDate(d.application_deadline) }}</td>
+            <td>{{ formatDateTime(d.application_deadline) }}</td>
             <td>{{ d.cgpa }}</td>
             <td><StatusBadge :status="d.status" /></td>
             <td class="text-end">
               <button class="btn btn-sm btn-outline-secondary me-1" @click="openView(d)">View</button>
               <template v-if="d.status === 'APPROVED'">
                 <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
-                <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close</button>
+                <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close Applications</button>
                 <button class="btn btn-sm btn-outline-danger" @click="askConfirm(d, 'cancel')">Cancel</button>
               </template>
             </td>
@@ -81,7 +81,7 @@
         </div>
         <div class="col-md-6">
           <label class="form-label">Application Deadline</label>
-          <input v-model="form.application_deadline" type="datetime-local" class="form-control" required :disabled="!editable" />
+          <input v-model="form.application_deadline" type="datetime-local" class="form-control" :min="minDateTimeLocal" required :disabled="!editable" />
         </div>
         <div class="col-md-6">
           <label class="form-label">Job Type</label>
@@ -104,7 +104,7 @@
     <Modal v-model="extendOpen" title="Extend Application Deadline">
       <form @submit.prevent="saveExtend">
         <label class="form-label">New Deadline</label>
-        <input v-model="extendValue" type="datetime-local" class="form-control" required />
+        <input v-model="extendValue" type="datetime-local" class="form-control" :min="minDateTimeLocal" required />
         <button type="submit" class="btn btn-primary mt-3">Extend Deadline</button>
       </form>
     </Modal>
@@ -123,9 +123,11 @@ import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import BranchTokenInput from '@/components/shared/BranchTokenInput.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDateTime, nowForDateTimeLocal } from '@/utils/date'
 
-const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'CLOSED', 'CANCELLED']
+const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'APPLICATIONS_CLOSED', 'CANCELLED']
 const TARGET_YEARS = Array.from({ length: 8 }, (_, i) => 2026 + i)
+const minDateTimeLocal = nowForDateTimeLocal()
 
 const drives = ref([])
 const branches = ref([])
@@ -159,11 +161,6 @@ const confirmMessage = ref('')
 const confirmLabel = ref('Confirm')
 let pendingAction = null
 let pendingDrive = null
-
-// Formats an ISO date string for table display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
 
 // Fetches the company's drive list for the active filter state.
 async function load() {
@@ -240,7 +237,7 @@ async function saveExtend() {
 }
 
 const ACTION_COPY = {
-  close: { title: 'Close Drive', message: 'This stops new applications to this drive. Continue?', label: 'Close' },
+  close: { title: 'Close Applications', message: 'This stops new applications to this drive. Continue?', label: 'Close Applications' },
   cancel: { title: 'Cancel Drive', message: 'This cancels the drive and rejects all active applications. Continue?', label: 'Cancel' },
 }
 

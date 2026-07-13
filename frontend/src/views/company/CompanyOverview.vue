@@ -22,7 +22,7 @@
           <tr v-for="d in drives" :key="d.id">
             <td>{{ d.job_title }}</td>
             <td><StatusBadge :status="d.status" /></td>
-            <td>{{ d.application_deadline ? new Date(d.application_deadline).toLocaleDateString() : '—' }}</td>
+            <td>{{ formatDate(d.application_deadline) }}</td>
             <td>{{ d.applicant_count }}</td>
           </tr>
           <tr v-if="!drives.length"><td colspan="4" class="text-center text-muted py-4">No placement drives yet.</td></tr>
@@ -37,6 +37,7 @@ import { ref, onMounted } from 'vue'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import api from '@/services/api'
+import { formatDate } from '@/utils/date'
 
 const profile = ref(null)
 const drives = ref([])

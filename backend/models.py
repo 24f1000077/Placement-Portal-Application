@@ -26,7 +26,7 @@ class PlacementDriveStatus(Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
-    CLOSED = "closed"
+    APPLICATIONS_CLOSED = "applications_closed"
     CANCELLED = "cancelled"
 
 class ApplicationStatus(Enum):

@@ -26,15 +26,49 @@
           <div class="small text-muted mb-2">
             Min CGPA: {{ d.cgpa }} · Target Year: {{ d.target_year }} · Deadline: {{ formatDate(d.application_deadline) }}
           </div>
-          <button
-            class="btn btn-primary btn-sm mt-auto"
-            :disabled="!d.eligible || d.already_applied || d.deadline_passed"
-            @click="openApply(d)"
-          >{{ d.already_applied ? 'Already Applied' : d.deadline_passed ? 'Deadline Passed' : 'Apply' }}</button>
+          <div class="d-flex gap-2 mt-auto">
+            <button class="btn btn-outline-secondary btn-sm flex-grow-1" @click="openView(d)">View Details</button>
+            <button
+              v-if="d.eligible && !d.already_applied && !d.deadline_passed"
+              class="btn btn-primary btn-sm flex-grow-1"
+              @click="openApply(d)"
+            >Apply</button>
+          </div>
         </div>
       </div>
       <div class="col-12" v-if="!drives.length"><p class="text-muted text-center py-4">No placement drives match your filters.</p></div>
     </div>
+
+    <Modal v-model="detailOpen" title="Placement Drive Details">
+      <div v-if="detailTarget">
+        <h2 class="h5">{{ detailTarget.job_title }}</h2>
+        <div class="text-muted small mb-3">{{ detailTarget.company_name }} · {{ detailTarget.location || 'Location TBD' }}</div>
+        <p>{{ detailTarget.job_description }}</p>
+        <div class="row g-2 small mb-3">
+          <div class="col-6"><span class="text-muted">Minimum CGPA:</span> {{ detailTarget.cgpa }}</div>
+          <div class="col-6"><span class="text-muted">Target Year:</span> {{ detailTarget.target_year }}</div>
+          <div class="col-6"><span class="text-muted">Deadline:</span> {{ formatDateTime(detailTarget.application_deadline) }}</div>
+          <div class="col-6"><span class="text-muted">Salary:</span> {{ detailTarget.salary }}</div>
+          <div class="col-12"><span class="text-muted">Skills:</span> {{ detailTarget.skills_required || '—' }}</div>
+          <div class="col-12"><span class="text-muted">Eligible Branches:</span> {{ detailTarget.allowed_branches.map(b => b.name).join(', ') || 'All branches' }}</div>
+        </div>
+
+        <div v-if="detailTarget.ineligibility_reasons.length" class="alert alert-warning py-2">
+          <div class="fw-semibold mb-1">You are not eligible for this drive:</div>
+          <ul class="mb-0 ps-3">
+            <li v-for="(reason, i) in detailTarget.ineligibility_reasons" :key="i">{{ reason }}</li>
+          </ul>
+        </div>
+
+        <button
+          v-if="detailTarget.eligible && !detailTarget.already_applied && !detailTarget.deadline_passed"
+          class="btn btn-primary"
+          @click="detailOpen = false; openApply(detailTarget)"
+        >Apply</button>
+        <div v-else-if="detailTarget.already_applied" class="text-muted small">You have already applied to this drive.</div>
+        <div v-else-if="detailTarget.deadline_passed" class="text-muted small">The application deadline has passed.</div>
+      </div>
+    </Modal>
 
     <Modal v-model="applyOpen" title="Confirm Application">
       <div v-if="applyTarget">
@@ -59,6 +93,7 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDate, formatDateTime } from '@/utils/date'
 
 const drives = ref([])
 const companyOptions = ref([])
@@ -68,14 +103,12 @@ const companyIds = ref([])
 const skills = ref('')
 const eligibleOnly = ref(false)
 
+const detailOpen = ref(false)
+const detailTarget = ref(null)
+
 const applyOpen = ref(false)
 const applyTarget = ref(null)
 const applying = ref(false)
-
-// Formats an ISO date string for display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleDateString() : '—'
-}
 
 // Fetches the approved drive list for the active search/filter state.
 async function load() {
@@ -88,19 +121,26 @@ async function load() {
     },
   })
   drives.value = data.results
-  const seen = new Map()
-  data.results.forEach((d) => seen.set(d.company_id, d.company_name))
-  companyOptions.value = [...seen.entries()].map(([value, label]) => ({ value, label }))
 }
 
 const debouncedLoad = debounce(load, 300)
 watch([search, companyIds, skills, eligibleOnly], debouncedLoad, { deep: true })
 
 onMounted(async () => {
-  const { data } = await api.get('/student/profile')
-  profile.value = data
+  const [profileRes, companiesRes] = await Promise.all([
+    api.get('/student/profile'),
+    api.get('/student/companies'),
+  ])
+  profile.value = profileRes.data
+  companyOptions.value = companiesRes.data.map((c) => ({ value: c.id, label: c.name }))
   await load()
 })
+
+// Opens the drive detail modal, available regardless of eligibility.
+function openView(drive) {
+  detailTarget.value = drive
+  detailOpen.value = true
+}
 
 // Opens the application confirmation modal for a drive.
 function openApply(drive) {

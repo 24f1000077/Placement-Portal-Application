@@ -83,6 +83,8 @@
           <textarea v-model="editing.experience" class="form-control" rows="2"></textarea>
         </div>
         <div class="col-12">
+          <button v-if="editing.has_resume" type="button" class="btn btn-outline-secondary me-2" @click="downloadFile(`/admin/students/${editing.id}/resume`, 'resume.pdf')">Download Resume</button>
+          <span v-else class="text-muted small me-2">No resume uploaded.</span>
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
         </div>
       </form>
@@ -106,6 +108,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { downloadFile } from '@/utils/download'
 
 const students = ref([])
 const branches = ref([])

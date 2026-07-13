@@ -24,7 +24,7 @@
         <div class="col-12">
           <label class="form-label">Resume (PDF)</label>
           <input type="file" accept="application/pdf" class="form-control" @change="onResumeFile" />
-          <a v-if="form.has_resume" href="/api/student/profile/resume" target="_blank" class="small d-inline-block mt-1">Download current resume</a>
+          <button v-if="form.has_resume" type="button" class="btn btn-link btn-sm px-0 mt-1" @click="downloadFile('/student/profile/resume', 'resume.pdf')">Download current resume</button>
         </div>
         <div class="col-12">
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
@@ -38,6 +38,7 @@
 import { ref, onMounted } from 'vue'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import api from '@/services/api'
+import { downloadFile } from '@/utils/download'
 
 const form = ref(null)
 const saving = ref(false)

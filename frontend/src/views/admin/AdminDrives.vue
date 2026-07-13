@@ -30,7 +30,7 @@
             <td>{{ d.job_title }}</td>
             <td>{{ d.company_name }}</td>
             <td>{{ d.target_year || '—' }}</td>
-            <td>{{ formatDate(d.application_deadline) }}</td>
+            <td>{{ formatDateTime(d.application_deadline) }}</td>
             <td>{{ d.cgpa }}</td>
             <td><StatusBadge :status="d.status" /></td>
             <td class="text-end">
@@ -41,8 +41,11 @@
               </template>
               <template v-else-if="d.status === 'APPROVED'">
                 <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
-                <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close</button>
+                <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close Applications</button>
                 <button class="btn btn-sm btn-outline-danger" @click="askConfirm(d, 'cancel')">Cancel</button>
+              </template>
+              <template v-else-if="d.status === 'APPLICATIONS_CLOSED'">
+                <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
               </template>
             </td>
           </tr>
@@ -89,7 +92,7 @@
         </div>
         <div class="col-md-6">
           <label class="form-label">Application Deadline</label>
-          <input v-model="editing.application_deadline" type="datetime-local" class="form-control" />
+          <input v-model="editing.application_deadline" type="datetime-local" class="form-control" :min="minDateTimeLocal" />
         </div>
         <div class="col-md-6">
           <label class="form-label">Job Type</label>
@@ -137,8 +140,9 @@ import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import BranchTokenInput from '@/components/shared/BranchTokenInput.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDateTime, nowForDateTimeLocal } from '@/utils/date'
 
-const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'CLOSED', 'CANCELLED']
+const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'APPLICATIONS_CLOSED', 'CANCELLED']
 const TARGET_YEARS = Array.from({ length: 8 }, (_, i) => 2026 + i)
 
 const drives = ref([])
@@ -165,12 +169,7 @@ const confirmLabel = ref('Confirm')
 let pendingAction = null
 let pendingDrive = null
 
-const minDateTimeLocal = computed(() => new Date(Date.now() + 60000).toISOString().slice(0, 16))
-
-// Formats an ISO date string for table display.
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
+const minDateTimeLocal = computed(() => nowForDateTimeLocal())
 
 // Fetches the drive list for the active search/filter state.
 async function load() {
@@ -243,7 +242,7 @@ async function saveExtend() {
 const ACTION_COPY = {
   approve: { title: 'Approve Drive', message: 'Students will be able to see and apply to this drive. Continue?', label: 'Approve' },
   reject: { title: 'Reject Drive', message: 'This rejects the placement drive request. Continue?', label: 'Reject' },
-  close: { title: 'Close Drive', message: 'This stops new applications to this drive. Continue?', label: 'Close' },
+  close: { title: 'Close Applications', message: 'This stops new applications to this drive. Continue?', label: 'Close Applications' },
   cancel: { title: 'Cancel Drive', message: 'This cancels the drive and rejects all active applications. Continue?', label: 'Cancel' },
 }
 

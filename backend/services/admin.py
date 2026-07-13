@@ -1,6 +1,7 @@
 import re
+import io
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 
 from models import (
     db, User, Role, Branch,
@@ -117,11 +118,12 @@ def blacklist_company(company_id):
     company.approval_status = CompanyStatus.BLACKLISTED
     company.user.is_active = False
     for drive in company.drives:
-        if drive.status in (PlacementDriveStatus.PENDING, PlacementDriveStatus.APPROVED):
+        if drive.status not in (PlacementDriveStatus.CANCELLED, PlacementDriveStatus.APPLICATIONS_CLOSED):
             drive.status = PlacementDriveStatus.CANCELLED
-            for application in drive.applications:
-                if application.status in ACTIVE_APPLICATION_STATUSES:
-                    application.status = ApplicationStatus.REJECTED
+        for application in drive.applications:
+            if application.status != ApplicationStatus.PLACED:
+                application.status = ApplicationStatus.REJECTED
+                application.feedback = 'Automatically rejected: the company was blacklisted.'
     db.session.commit()
     cache.clear()
     return jsonify(company_to_dict(company))
@@ -237,7 +239,7 @@ def close_drive(drive_id):
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status != PlacementDriveStatus.APPROVED:
         return error('Only approved drives can be closed.')
-    drive.status = PlacementDriveStatus.CLOSED
+    drive.status = PlacementDriveStatus.APPLICATIONS_CLOSED
     db.session.commit()
     cache.clear()
     return jsonify(drive_to_dict(drive))
@@ -253,6 +255,7 @@ def cancel_drive(drive_id):
     for application in drive.applications:
         if application.status in ACTIVE_APPLICATION_STATUSES:
             application.status = ApplicationStatus.REJECTED
+            application.feedback = 'Automatically rejected: the placement drive was cancelled.'
     db.session.commit()
     cache.clear()
     return jsonify(drive_to_dict(drive))
@@ -262,6 +265,8 @@ def cancel_drive(drive_id):
 @role_required('ADMIN')
 def extend_deadline(drive_id):
     drive = PlacementDrive.query.get_or_404(drive_id)
+    if drive.status not in (PlacementDriveStatus.APPROVED, PlacementDriveStatus.APPLICATIONS_CLOSED):
+        return error('Only approved or applications-closed drives can have their deadline extended.')
     data = request.get_json(force=True) or {}
     try:
         new_deadline = datetime.fromisoformat(data.get('application_deadline', ''))
@@ -270,6 +275,8 @@ def extend_deadline(drive_id):
     if new_deadline <= datetime.now(timezone.utc).replace(tzinfo=new_deadline.tzinfo):
         return error('The new deadline must be a future date.')
     drive.application_deadline = new_deadline
+    if drive.status == PlacementDriveStatus.APPLICATIONS_CLOSED:
+        drive.status = PlacementDriveStatus.APPROVED
     db.session.commit()
     cache.clear()
     return jsonify(drive_to_dict(drive))
@@ -301,19 +308,6 @@ def list_applications():
 @role_required('ADMIN')
 def get_application(application_id):
     application = Application.query.get_or_404(application_id)
-    return jsonify(application_to_dict(application))
-
-
-@admin_bp.route('/applications/<int:application_id>/status', methods=['PATCH'])
-@role_required('ADMIN')
-def update_application_status(application_id):
-    application = Application.query.get_or_404(application_id)
-    data = request.get_json(force=True) or {}
-    status = data.get('status')
-    if status not in ApplicationStatus.__members__:
-        return error('Please provide a valid application status.')
-    application.status = ApplicationStatus[status]
-    db.session.commit()
     return jsonify(application_to_dict(application))
 
 
@@ -401,6 +395,33 @@ def whitelist_student(student_id):
     db.session.commit()
     cache.clear()
     return jsonify(student_to_dict(student))
+
+
+@admin_bp.route('/students/<int:student_id>/resume', methods=['GET'])
+@role_required('ADMIN')
+def download_student_resume(student_id):
+    student = StudentProfile.query.get_or_404(student_id)
+    if not student.resume:
+        return error('No resume uploaded yet.', 404)
+    return send_file(io.BytesIO(student.resume), mimetype='application/pdf', download_name='resume.pdf')
+
+
+@admin_bp.route('/applications/<int:application_id>/resume', methods=['GET'])
+@role_required('ADMIN')
+def download_application_resume(application_id):
+    application = Application.query.get_or_404(application_id)
+    if not application.student.resume:
+        return error('No resume uploaded yet.', 404)
+    return send_file(io.BytesIO(application.student.resume), mimetype='application/pdf', download_name='resume.pdf')
+
+
+@admin_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
+@role_required('ADMIN')
+def download_application_offer_letter(application_id):
+    application = Application.query.get_or_404(application_id)
+    if not application.offer_letter:
+        return error('No offer letter uploaded yet.', 404)
+    return send_file(io.BytesIO(application.offer_letter), mimetype='application/pdf', download_name='offer_letter.pdf')
 
 
 # ---- Interviews ----
