@@ -3,12 +3,20 @@
   <AppLayout>
     <h1 class="h4 mb-4">Placement Drives</h1>
 
+    <div v-if="companyFilterLabel" class="alert alert-info py-2 d-flex align-items-center justify-content-between mb-3">
+      <span>Showing drives for <strong>{{ companyFilterLabel }}</strong></span>
+      <button class="btn btn-sm btn-outline-secondary" @click="clearCompanyFilter">Clear filter</button>
+    </div>
+
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <input v-model="search" type="search" class="form-control" style="max-width: 240px;" placeholder="Search job title…" />
       <MultiSelectDropdown label="Company" :options="companyOptions" v-model="companyIds" />
       <MultiSelectDropdown label="Status" :options="STATUS_OPTIONS" v-model="statuses" />
+      <MultiSelectDropdown label="Branch" :options="branchOptions" v-model="branchFilter" />
       <input v-model="skills" type="search" class="form-control" style="max-width: 180px;" placeholder="Skills…" />
       <input v-model="minCgpa" type="number" min="0" max="10" step="0.1" class="form-control" style="max-width: 120px;" placeholder="Min CGPA" />
+      <input v-model="deadlineFrom" type="date" class="form-control" style="max-width: 160px;" title="Deadline from" />
+      <input v-model="deadlineTo" type="date" class="form-control" style="max-width: 160px;" title="Deadline to" />
       <span class="text-muted small ms-auto">{{ drives.length }} record(s)</span>
     </div>
 
@@ -35,6 +43,7 @@
             <td><StatusBadge :status="d.status" /></td>
             <td class="text-end">
               <button class="btn btn-sm btn-outline-secondary me-1" @click="openView(d)">View</button>
+              <button class="btn btn-sm btn-outline-secondary me-1" @click="viewApplications(d)">View Applications</button>
               <template v-if="d.status === 'PENDING'">
                 <button class="btn btn-sm btn-outline-success me-1" @click="askConfirm(d, 'approve')">Approve</button>
                 <button class="btn btn-sm btn-outline-danger" @click="askConfirm(d, 'reject')">Reject</button>
@@ -87,10 +96,6 @@
           <input v-model="editing.skills_required" class="form-control" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Contact Phone</label>
-          <input v-model="editing.contact_phone" class="form-control" pattern="\d{7,15}" />
-        </div>
-        <div class="col-md-6">
           <label class="form-label">Application Deadline</label>
           <input v-model="editing.application_deadline" type="datetime-local" class="form-control" :min="minDateTimeLocal" />
         </div>
@@ -132,6 +137,7 @@
 
 <script setup>
 import { ref, watch, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -145,14 +151,33 @@ import { formatDateTime, nowForDateTimeLocal } from '@/utils/date'
 const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'APPLICATIONS_CLOSED', 'CANCELLED']
 const TARGET_YEARS = Array.from({ length: 8 }, (_, i) => 2026 + i)
 
+const route = useRoute()
+const router = useRouter()
+
 const drives = ref([])
 const companyOptions = ref([])
 const branches = ref([])
 const search = ref('')
 const companyIds = ref([])
 const statuses = ref([])
+const branchFilter = ref([])
 const skills = ref('')
 const minCgpa = ref('')
+const deadlineFrom = ref('')
+const deadlineTo = ref('')
+
+const branchOptions = computed(() => branches.value.map((b) => b.name))
+
+// Shows which company the list is currently pinned to, when arriving via a "View Drives" link.
+const companyFilterLabel = computed(() => {
+  if (companyIds.value.length !== 1) return ''
+  const match = companyOptions.value.find((c) => c.value === companyIds.value[0])
+  return match ? match.label : ''
+})
+
+function clearCompanyFilter() {
+  companyIds.value = []
+}
 
 const viewOpen = ref(false)
 const editing = ref(null)
@@ -178,15 +203,18 @@ async function load() {
       search: search.value,
       company_ids: companyIds.value.join(','),
       status: statuses.value.join(','),
+      branches: branchFilter.value.join(','),
       skills: skills.value,
       min_cgpa: minCgpa.value || undefined,
+      deadline_from: deadlineFrom.value || undefined,
+      deadline_to: deadlineTo.value || undefined,
     },
   })
   drives.value = data.results
 }
 
 const debouncedLoad = debounce(load, 300)
-watch([search, companyIds, statuses, skills, minCgpa], debouncedLoad, { deep: true })
+watch([search, companyIds, statuses, branchFilter, skills, minCgpa, deadlineFrom, deadlineTo], debouncedLoad, { deep: true })
 
 onMounted(async () => {
   const [companiesRes, branchesRes] = await Promise.all([
@@ -195,8 +223,17 @@ onMounted(async () => {
   ])
   companyOptions.value = companiesRes.data.results.map((c) => ({ value: c.id, label: c.company_name }))
   branches.value = branchesRes.data
+  // Pre-apply a company filter passed in via a "View Drives" link from the Companies page.
+  if (route.query.company_id) {
+    companyIds.value = [Number(route.query.company_id)]
+  }
   await load()
 })
+
+// Navigates to Applications, pre-filtered to this drive.
+function viewApplications(drive) {
+  router.push({ path: '/admin/applications', query: { drive_id: drive.id } })
+}
 
 // Opens the full-width detail/edit modal for a drive.
 function openView(drive) {

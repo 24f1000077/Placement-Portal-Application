@@ -8,6 +8,7 @@
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <MultiSelectDropdown label="Status" :options="STATUS_OPTIONS" v-model="statuses" />
+      <MultiSelectDropdown label="Branch" :options="branchOptions" v-model="branchFilter" />
       <input v-model="skills" type="search" class="form-control" style="max-width: 180px;" placeholder="Skills…" />
       <input v-model="minCgpa" type="number" min="0" max="10" step="0.1" class="form-control" style="max-width: 120px;" placeholder="Min CGPA" />
       <span class="text-muted small ms-auto">{{ drives.length }} record(s)</span>
@@ -29,6 +30,7 @@
             <td><StatusBadge :status="d.status" /></td>
             <td class="text-end">
               <button class="btn btn-sm btn-outline-secondary me-1" @click="openView(d)">View</button>
+              <button class="btn btn-sm btn-outline-secondary me-1" @click="viewApplicants(d)">View Applicants</button>
               <template v-if="d.status === 'APPROVED'">
                 <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
                 <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close Applications</button>
@@ -76,10 +78,6 @@
           <input v-model="form.skills_required" class="form-control" placeholder="e.g. Python, SQL" :disabled="!editable" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Contact Number</label>
-          <input v-model="form.contact_phone" class="form-control" pattern="\d{7,15}" required :disabled="!editable" />
-        </div>
-        <div class="col-md-6">
           <label class="form-label">Application Deadline</label>
           <input v-model="form.application_deadline" type="datetime-local" class="form-control" :min="minDateTimeLocal" required :disabled="!editable" />
         </div>
@@ -89,7 +87,7 @@
         </div>
         <div class="col-12">
           <label class="form-label">Eligible Branches</label>
-          <BranchTokenInput v-model="form.branch_ids" :options="branches" />
+          <BranchTokenInput v-model="form.branch_ids" :options="branches" :allow-select-all="editable" />
         </div>
         <div class="col-12">
           <label class="form-label">Benefits / Notes</label>
@@ -114,7 +112,8 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -129,11 +128,16 @@ const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'APPLICATIONS_CLOSED'
 const TARGET_YEARS = Array.from({ length: 8 }, (_, i) => 2026 + i)
 const minDateTimeLocal = nowForDateTimeLocal()
 
+const router = useRouter()
+
 const drives = ref([])
 const branches = ref([])
 const statuses = ref([])
+const branchFilter = ref([])
 const skills = ref('')
 const minCgpa = ref('')
+
+const branchOptions = computed(() => branches.value.map((b) => b.name))
 
 const formOpen = ref(false)
 const formMode = ref('create')
@@ -144,7 +148,7 @@ let editingId = null
 
 function blankForm() {
   return {
-    job_title: '', job_description: '', location: '', job_type: '', contact_phone: '',
+    job_title: '', job_description: '', location: '', job_type: '',
     cgpa: null, target_year: '', salary: null, skills_required: '', benefits: '',
     application_deadline: '', branch_ids: [],
   }
@@ -165,19 +169,29 @@ let pendingDrive = null
 // Fetches the company's drive list for the active filter state.
 async function load() {
   const { data } = await api.get('/company/drives', {
-    params: { status: statuses.value.join(','), skills: skills.value, min_cgpa: minCgpa.value || undefined },
+    params: {
+      status: statuses.value.join(','),
+      branches: branchFilter.value.join(','),
+      skills: skills.value,
+      min_cgpa: minCgpa.value || undefined,
+    },
   })
   drives.value = data.results
 }
 
 const debouncedLoad = debounce(load, 300)
-watch([statuses, skills, minCgpa], debouncedLoad, { deep: true })
+watch([statuses, branchFilter, skills, minCgpa], debouncedLoad, { deep: true })
 
 onMounted(async () => {
   const { data } = await api.get('/auth/branches')
   branches.value = data
   await load()
 })
+
+// Navigates to Applications, pre-filtered to this drive.
+function viewApplicants(drive) {
+  router.push({ path: '/company/applications', query: { drive_id: drive.id } })
+}
 
 // Opens the creation form in a blank state.
 function openCreate() {

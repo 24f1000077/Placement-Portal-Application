@@ -28,6 +28,8 @@
             <td><StatusBadge :status="c.approval_status" /></td>
             <td class="text-end">
               <button class="btn btn-sm btn-outline-secondary me-1" @click="openView(c)">View</button>
+              <button class="btn btn-sm btn-outline-secondary me-1" @click="viewDrives(c)">View Drives</button>
+              <button class="btn btn-sm btn-outline-secondary me-1" @click="viewApplications(c)">View Applications</button>
               <template v-if="c.approval_status === 'PENDING'">
                 <button class="btn btn-sm btn-outline-success me-1" @click="askConfirm(c, 'approve')">Accept</button>
                 <button class="btn btn-sm btn-outline-danger" @click="askConfirm(c, 'reject')">Reject</button>
@@ -89,6 +91,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -98,6 +101,8 @@ import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
 
 const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'BLACKLISTED']
+
+const router = useRouter()
 
 const companies = ref([])
 const search = ref('')
@@ -125,6 +130,16 @@ async function load() {
 const debouncedLoad = debounce(load, 300)
 watch([search, statuses], debouncedLoad, { deep: true })
 onMounted(load)
+
+// Navigates to Placement Drives, pre-filtered to this company.
+function viewDrives(company) {
+  router.push({ path: '/admin/drives', query: { company_id: company.id } })
+}
+
+// Navigates to Applications, pre-filtered to this company.
+function viewApplications(company) {
+  router.push({ path: '/admin/applications', query: { company_id: company.id } })
+}
 
 // Opens the full-width detail/edit modal for a company.
 function openView(company) {

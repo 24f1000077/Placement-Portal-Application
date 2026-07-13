@@ -1,6 +1,6 @@
 import re
 import io
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, send_file
 
 from models import (
@@ -9,7 +9,7 @@ from models import (
     StudentProfile, StudentStatus,
     PlacementDrive, PlacementDriveStatus, drive_branches,
     Application, ApplicationStatus,
-    InterviewSchedule,
+    InterviewSchedule, InterviewStatus, Placement,
 )
 from serializers import company_to_dict, student_to_dict, drive_to_dict, application_to_dict, interview_to_dict
 from utils import role_required, error
@@ -167,6 +167,12 @@ def list_drives():
     branches = split_param('branches')
     if branches:
         q = q.join(drive_branches).join(Branch).filter(Branch.name.in_(branches))
+    deadline_from = request.args.get('deadline_from')
+    if deadline_from:
+        q = q.filter(PlacementDrive.application_deadline >= datetime.fromisoformat(deadline_from))
+    deadline_to = request.args.get('deadline_to')
+    if deadline_to:
+        q = q.filter(PlacementDrive.application_deadline < datetime.fromisoformat(deadline_to) + timedelta(days=1))
     drives = q.order_by(PlacementDrive.id.desc()).all()
     return jsonify({'count': len(drives), 'results': [drive_to_dict(d) for d in drives]})
 
@@ -177,7 +183,7 @@ def update_drive(drive_id):
     drive = PlacementDrive.query.get_or_404(drive_id)
     data = request.get_json(force=True) or {}
 
-    for field in ['job_title', 'job_description', 'location', 'job_type', 'contact_phone',
+    for field in ['job_title', 'job_description', 'location', 'job_type',
                   'skills_required', 'experience_required', 'benefits', 'notes']:
         if field in data:
             setattr(drive, field, data[field])
@@ -311,6 +317,36 @@ def get_application(application_id):
     return jsonify(application_to_dict(application))
 
 
+@admin_bp.route('/applications/<int:application_id>', methods=['PATCH'])
+@role_required('ADMIN')
+def update_application(application_id):
+    application = Application.query.get_or_404(application_id)
+    data = request.get_json(force=True) or {}
+
+    if 'status' in data:
+        if data['status'] not in ApplicationStatus.__members__:
+            return error('Invalid application status.')
+        application.status = ApplicationStatus[data['status']]
+    if 'feedback' in data:
+        application.feedback = data['feedback'] or None
+    if 'offered_salary' in data:
+        try:
+            application.offered_salary = float(data['offered_salary']) if data['offered_salary'] not in (None, '') else None
+        except (TypeError, ValueError):
+            return error('Offered salary must be a number.')
+    if 'offered_joining_date' in data:
+        try:
+            application.offered_joining_date = (
+                datetime.fromisoformat(data['offered_joining_date']).date() if data['offered_joining_date'] else None
+            )
+        except ValueError:
+            return error('Offered joining date must be a valid date.')
+
+    db.session.commit()
+    cache.clear()
+    return jsonify(application_to_dict(application))
+
+
 # ---- Students ----
 
 @admin_bp.route('/students', methods=['GET'])
@@ -320,7 +356,24 @@ def list_students():
     q = StudentProfile.query.join(User)
     search = request.args.get('search', '').strip()
     if search:
-        q = q.filter(User.name.ilike(f'%{search}%'))
+        q = q.filter(db.or_(User.name.ilike(f'%{search}%'), User.email.ilike(f'%{search}%')))
+    branches = split_param('branches')
+    if branches:
+        q = q.join(Branch, StudentProfile.branch_id == Branch.id).filter(Branch.name.in_(branches))
+    grad_years = split_param('graduation_years')
+    if grad_years:
+        q = q.filter(StudentProfile.graduation_year.in_([int(y) for y in grad_years]))
+    min_cgpa = request.args.get('min_cgpa')
+    if min_cgpa:
+        q = q.filter(StudentProfile.cgpa >= float(min_cgpa))
+    max_cgpa = request.args.get('max_cgpa')
+    if max_cgpa:
+        q = q.filter(StudentProfile.cgpa <= float(max_cgpa))
+    placement_status = request.args.get('placement_status', '').strip().upper()
+    if placement_status == 'PLACED':
+        q = q.filter(StudentProfile.placements.any())
+    elif placement_status == 'UNPLACED':
+        q = q.filter(~StudentProfile.placements.any())
     students = q.order_by(StudentProfile.id.desc()).all()
     return jsonify({'count': len(students), 'results': [student_to_dict(s) for s in students]})
 
@@ -454,3 +507,32 @@ def list_interviews():
         })
         results.append(payload)
     return jsonify({'count': len(results), 'results': results})
+
+
+@admin_bp.route('/interviews/<int:interview_id>', methods=['PATCH'])
+@role_required('ADMIN')
+def update_interview(interview_id):
+    interview = InterviewSchedule.query.get_or_404(interview_id)
+    data = request.get_json(force=True) or {}
+
+    if 'scheduled_date_time' in data:
+        try:
+            interview.scheduled_date_time = datetime.fromisoformat(data['scheduled_date_time'])
+        except (TypeError, ValueError):
+            return error('Scheduled date/time must be a valid datetime.')
+    if 'meeting_link' in data:
+        interview.meeting_link = data['meeting_link'] or None
+    if 'interviewer_name' in data:
+        interview.interviewer_name = data['interviewer_name'] or None
+    if 'notes' in data:
+        interview.notes = data['notes'] or None
+    if 'feedback' in data:
+        interview.feedback = data['feedback'] or None
+    if 'status' in data:
+        if data['status'] not in InterviewStatus.__members__:
+            return error('Invalid interview status.')
+        interview.status = InterviewStatus[data['status']]
+
+    db.session.commit()
+    cache.clear()
+    return jsonify(interview_to_dict(interview))

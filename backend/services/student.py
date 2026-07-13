@@ -15,7 +15,7 @@ from models import (
     Placement,
 )
 from serializers import student_to_dict, drive_to_dict, application_to_dict
-from utils import role_required, error
+from utils import role_required, error, apply_password_change
 from app import cache
 
 student_bp = Blueprint('student', __name__)
@@ -219,12 +219,24 @@ def update_profile():
         if contact and not PHONE_RE.match(contact):
             return error('Please provide a valid contact number.')
         student.contact_number = contact or None
+    if 'cgpa' in data:
+        try:
+            cgpa = float(data['cgpa'])
+        except (TypeError, ValueError):
+            return error('CGPA must be a number.')
+        if cgpa < 0 or cgpa > 10:
+            return error('CGPA must be between 0.0 and 10.0.')
+        student.cgpa = cgpa
     if 'skills' in data:
         student.skills = data['skills']
     if 'experience' in data:
         student.experience = data['experience']
     if resume_file:
         student.resume = resume_file.read()
+
+    password_error = apply_password_change(student.user, data)
+    if password_error:
+        return password_error
 
     db.session.commit()
     cache.clear()
@@ -242,11 +254,15 @@ def download_resume():
 
 # ---- Async CSV export ----
 
+FINISHED_STATUSES = [ApplicationStatus.REJECTED.name, ApplicationStatus.WITHDRAWN.name, ApplicationStatus.PLACED.name]
+
+
 @student_bp.route('/applications/export', methods=['POST'])
 @role_required('STUDENT')
 def export_applications():
     student = current_student()
-    task = task_client.send_task('tasks.export_applications_csv', args=[student.id])
+    statuses = FINISHED_STATUSES if request.args.get('history') == 'true' else None
+    task = task_client.send_task('tasks.export_applications_csv', args=[student.id, statuses])
     return jsonify({'task_id': task.id}), 202
 
 

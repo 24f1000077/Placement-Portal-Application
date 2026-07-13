@@ -6,12 +6,12 @@ from flask_jwt_extended import get_jwt_identity
 
 from models import (
     db, User, CompanyProfile, Branch, StudentProfile,
-    PlacementDrive, PlacementDriveStatus,
+    PlacementDrive, PlacementDriveStatus, drive_branches,
     Application, ApplicationStatus,
     InterviewSchedule, InterviewStatus,
 )
 from serializers import company_to_dict, drive_to_dict, application_to_dict, interview_to_dict
-from utils import role_required, error
+from utils import role_required, error, apply_password_change
 from app import cache
 
 company_bp = Blueprint('company', __name__)
@@ -69,6 +69,9 @@ def list_drives():
     min_cgpa = request.args.get('min_cgpa')
     if min_cgpa:
         q = q.filter(PlacementDrive.cgpa >= float(min_cgpa))
+    branches = [b for b in request.args.get('branches', '').split(',') if b]
+    if branches:
+        q = q.join(drive_branches).join(Branch).filter(Branch.name.in_(branches))
     sort = request.args.get('sort', 'created_at')
     order = PlacementDrive.application_deadline.asc() if sort == 'deadline' else PlacementDrive.created_at.desc()
     drives = q.order_by(order).all()
@@ -79,9 +82,6 @@ def validate_drive_payload(data):
     errors = []
     if not (data.get('job_title') or '').strip():
         errors.append('Job title is required.')
-    contact_phone = (data.get('contact_phone') or '').strip()
-    if not contact_phone or not PHONE_RE.match(contact_phone):
-        errors.append('Please provide a valid contact number.')
     try:
         cgpa = float(data.get('cgpa'))
         if cgpa < 0 or cgpa > 10:
@@ -128,7 +128,6 @@ def create_drive():
         job_description=data.get('job_description'),
         location=data.get('location'),
         job_type=data.get('job_type'),
-        contact_phone=data['contact_phone'].strip(),
         application_deadline=datetime.fromisoformat(data['application_deadline']),
         cgpa=float(data['cgpa']),
         target_year=int(data['target_year']),
@@ -163,7 +162,6 @@ def update_drive(drive_id):
     drive.job_description = data.get('job_description')
     drive.location = data.get('location')
     drive.job_type = data.get('job_type')
-    drive.contact_phone = data['contact_phone'].strip()
     drive.application_deadline = datetime.fromisoformat(data['application_deadline'])
     drive.cgpa = float(data['cgpa'])
     drive.target_year = int(data['target_year'])
@@ -248,6 +246,9 @@ def list_applications():
         q = q.filter(PlacementDrive.status == PlacementDriveStatus.APPROVED)
     elif open_closed == 'closed':
         q = q.filter(PlacementDrive.status.in_([PlacementDriveStatus.APPLICATIONS_CLOSED, PlacementDriveStatus.CANCELLED]))
+    drive_statuses = [s for s in request.args.get('drive_status', '').split(',') if s]
+    if drive_statuses:
+        q = q.filter(PlacementDrive.status.in_([PlacementDriveStatus[s] for s in drive_statuses if s in PlacementDriveStatus.__members__]))
     applications = q.order_by(Application.id.desc()).all()
     results = [application_to_dict(a, include_interviews=False) for a in applications]
     if search:
@@ -288,8 +289,8 @@ def schedule_interview(application_id):
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
-    if application.status != ApplicationStatus.INTERVIEW:
-        return error('Interviews can only be scheduled once the candidate reaches the Interview stage.')
+    if application.status not in (ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW):
+        return error('Interviews can only be scheduled once the candidate is shortlisted.')
     data = request.get_json(force=True) or {}
     try:
         scheduled = datetime.fromisoformat(data.get('scheduled_date_time', ''))
@@ -307,6 +308,8 @@ def schedule_interview(application_id):
         status=InterviewStatus.SCHEDULED,
     )
     db.session.add(interview)
+    # Scheduling the first interview is how a shortlisted candidate moves into the Interview stage.
+    application.status = ApplicationStatus.INTERVIEW
     db.session.commit()
     return jsonify(interview_to_dict(interview)), 201
 
@@ -431,6 +434,11 @@ def update_profile():
         company.industry = data['industry'].strip() or None
     if 'website' in data:
         company.website = data['website'].strip() or None
+
+    password_error = apply_password_change(company.user, data)
+    if password_error:
+        return password_error
+
     db.session.commit()
     cache.clear()
     return jsonify(company_to_dict(company))

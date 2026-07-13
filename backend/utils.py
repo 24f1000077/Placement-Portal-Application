@@ -1,6 +1,7 @@
 from functools import wraps
 from flask import jsonify
-from flask_jwt_extended import jwt_required, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 def role_required(*roles):
@@ -11,10 +12,39 @@ def role_required(*roles):
             claims = get_jwt()
             if claims.get('role') not in roles:
                 return jsonify(message='You do not have access to this resource.'), 403
+            if not current_user_is_active():
+                return jsonify(message='Your account has been deactivated. Please contact the institute admin.'), 401
             return fn(*args, **kwargs)
         return wrapper
     return decorator
 
 
+def current_user_is_active():
+    from models import User
+    user = User.query.get(int(get_jwt_identity()))
+    return user is not None and user.is_active
+
+
 def error(message, status=400):
     return jsonify(message=message), status
+
+
+def apply_password_change(user, data):
+    """Applies an optional password change from a profile-update payload onto `user`.
+
+    No-op (returns None) if `new_password` is absent/blank, so callers can update other
+    profile fields without touching the password. Returns a Flask error response if the
+    requested change is invalid.
+    """
+    new_password = (data.get('new_password') or '').strip()
+    if not new_password:
+        return None
+    current_password = (data.get('current_password') or '').strip()
+    if not current_password or not check_password_hash(user.password, current_password):
+        return error('Current password is incorrect.')
+    if len(new_password) < 6:
+        return error('New password must be at least 6 characters long.')
+    if check_password_hash(user.password, new_password):
+        return error('New password must be different from your current password.')
+    user.password = generate_password_hash(new_password)
+    return None

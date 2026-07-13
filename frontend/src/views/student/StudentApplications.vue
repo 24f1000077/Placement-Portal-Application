@@ -81,7 +81,7 @@
           <div class="col-6"><span class="text-muted">Offered Salary:</span> {{ detail.offered_salary }}</div>
           <div class="col-6"><span class="text-muted">Joining Date:</span> {{ formatDate(detail.offered_joining_date) }}</div>
         </div>
-        <button v-if="detail.has_offer_letter" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/student/applications/${detail.id}/offer-letter`, 'offer_letter.pdf')">Download Offer Letter</button>
+        <button v-if="detail.has_offer_letter" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/student/applications/${detail.id}/offer-letter`, studentFileName(detail.student_name, 'offer_letter.pdf'))">Download Offer Letter</button>
       </div>
     </Modal>
 
@@ -106,7 +106,7 @@ import PipelineGraph from '@/components/shared/PipelineGraph.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
 import { formatDate, formatDateTime } from '@/utils/date'
-import { downloadFile } from '@/utils/download'
+import { downloadFile, studentFileName } from '@/utils/download'
 
 const STATUS_OPTIONS = ['APPLIED', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'PLACED', 'REJECTED', 'WITHDRAWN']
 

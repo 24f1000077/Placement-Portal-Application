@@ -15,6 +15,7 @@ def student_to_dict(student):
         'skills': student.skills,
         'experience': student.experience,
         'has_resume': student.resume is not None,
+        'is_placed': len(student.placements) > 0,
     }
 
 
@@ -43,7 +44,6 @@ def drive_to_dict(drive, include_applicant_count=True):
         'job_description': drive.job_description,
         'location': drive.location,
         'job_type': drive.job_type,
-        'contact_phone': drive.contact_phone,
         'application_deadline': drive.application_deadline.isoformat() if drive.application_deadline else None,
         'cgpa': drive.cgpa,
         'target_year': drive.target_year,

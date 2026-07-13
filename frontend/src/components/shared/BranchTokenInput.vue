@@ -7,14 +7,17 @@
         <button type="button" class="pp-token-remove" @click="remove(b.id)">×</button>
       </span>
     </div>
-    <input
-      list="branch-options"
-      class="form-control"
-      placeholder="Type a branch name and press Enter"
-      v-model="draft"
-      @keydown.enter.prevent="tryAdd"
-      @change="tryAdd"
-    />
+    <div class="d-flex gap-2">
+      <input
+        list="branch-options"
+        class="form-control"
+        placeholder="Type a branch name and press Enter"
+        v-model="draft"
+        @keydown.enter.prevent="tryAdd"
+        @change="tryAdd"
+      />
+      <button v-if="allowSelectAll" type="button" class="btn btn-outline-secondary text-nowrap" @click="selectAll">Select All</button>
+    </div>
     <datalist id="branch-options">
       <option v-for="b in available" :key="b.id" :value="b.name" />
     </datalist>
@@ -27,6 +30,7 @@ import { computed, ref } from 'vue'
 const props = defineProps({
   modelValue: { type: Array, required: true },
   options: { type: Array, required: true },
+  allowSelectAll: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -49,6 +53,11 @@ function tryAdd() {
 // Removes a branch pill from the selection.
 function remove(id) {
   emit('update:modelValue', props.modelValue.filter((v) => v !== id))
+}
+
+// Explicitly selects every currently available branch (a plain snapshot, not a dynamic "all" flag).
+function selectAll() {
+  emit('update:modelValue', props.options.map((b) => b.id))
 }
 </script>
 

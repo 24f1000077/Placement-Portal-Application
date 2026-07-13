@@ -159,6 +159,8 @@ def me():
     user = User.query.get(int(get_jwt_identity()))
     if not user:
         return error('User not found.', 404)
+    if not user.is_active:
+        return error('Your account has been deactivated. Please contact the institute admin.', 401)
     payload = {'id': user.id, 'name': user.name, 'email': user.email, 'role': claims.get('role')}
     if user.role == Role.STUDENT:
         payload['profile'] = student_to_dict(user.student_profile)

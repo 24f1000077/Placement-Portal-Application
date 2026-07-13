@@ -4,7 +4,16 @@
     <h1 class="h4 mb-4">Students</h1>
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-      <input v-model="search" type="search" class="form-control" style="max-width: 280px;" placeholder="Search student name…" />
+      <input v-model="search" type="search" class="form-control" style="max-width: 280px;" placeholder="Search by name or email…" />
+      <MultiSelectDropdown label="Branch" :options="branchOptions" v-model="branchFilter" />
+      <MultiSelectDropdown label="Graduation Year" :options="yearOptions" v-model="yearFilter" />
+      <select v-model="placementStatus" class="form-select" style="max-width: 160px;">
+        <option value="">All Placement Status</option>
+        <option value="PLACED">Placed</option>
+        <option value="UNPLACED">Unplaced</option>
+      </select>
+      <input v-model.number="minCgpa" type="number" min="0" max="10" step="0.01" class="form-control" style="max-width: 120px;" placeholder="Min CGPA" />
+      <input v-model.number="maxCgpa" type="number" min="0" max="10" step="0.01" class="form-control" style="max-width: 120px;" placeholder="Max CGPA" />
       <span class="text-muted small ms-auto">{{ students.length }} record(s)</span>
     </div>
 
@@ -17,6 +26,7 @@
             <th>Branch</th>
             <th>CGPA</th>
             <th>Status</th>
+            <th>Placement</th>
             <th class="text-end">Actions</th>
           </tr>
         </thead>
@@ -27,6 +37,7 @@
             <td>{{ s.branch || '—' }}</td>
             <td>{{ s.cgpa }}</td>
             <td><StatusBadge :status="s.approval_status" /></td>
+            <td>{{ s.is_placed ? 'Placed' : 'Unplaced' }}</td>
             <td class="text-end">
               <button class="btn btn-sm btn-outline-secondary me-1" @click="openView(s)">View</button>
               <button
@@ -41,7 +52,7 @@
               >Whitelist</button>
             </td>
           </tr>
-          <tr v-if="!students.length"><td colspan="6" class="text-center text-muted py-4">No students found.</td></tr>
+          <tr v-if="!students.length"><td colspan="7" class="text-center text-muted py-4">No students found.</td></tr>
         </tbody>
       </table>
     </div>
@@ -70,7 +81,7 @@
         </div>
         <div class="col-md-6">
           <label class="form-label">Branch</label>
-          <select v-model.number="editing.branch_id" class="form-select">
+          <select v-model.number="editing.branch_id" class="form-select" required>
             <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
           </select>
         </div>
@@ -83,7 +94,7 @@
           <textarea v-model="editing.experience" class="form-control" rows="2"></textarea>
         </div>
         <div class="col-12">
-          <button v-if="editing.has_resume" type="button" class="btn btn-outline-secondary me-2" @click="downloadFile(`/admin/students/${editing.id}/resume`, 'resume.pdf')">Download Resume</button>
+          <button v-if="editing.has_resume" type="button" class="btn btn-outline-secondary me-2" @click="downloadFile(`/admin/students/${editing.id}/resume`, studentFileName(editing.name, 'resume.pdf'))">Download Resume</button>
           <span v-else class="text-muted small me-2">No resume uploaded.</span>
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
         </div>
@@ -101,18 +112,29 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
+import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
-import { downloadFile } from '@/utils/download'
+import { downloadFile, studentFileName } from '@/utils/download'
+
+const YEAR_OPTIONS = Array.from({ length: 16 }, (_, i) => 2020 + i)
 
 const students = ref([])
 const branches = ref([])
 const search = ref('')
+const branchFilter = ref([])
+const yearFilter = ref([])
+const placementStatus = ref('')
+const minCgpa = ref(null)
+const maxCgpa = ref(null)
+
+const branchOptions = computed(() => branches.value.map((b) => b.name))
+const yearOptions = computed(() => YEAR_OPTIONS)
 
 const viewOpen = ref(false)
 const editing = ref(null)
@@ -125,14 +147,23 @@ const confirmLabel = ref('Confirm')
 let pendingAction = null
 let pendingStudent = null
 
-// Fetches the student list for the active search state.
+// Fetches the student list for the active filter state.
 async function load() {
-  const { data } = await api.get('/admin/students', { params: { search: search.value } })
+  const { data } = await api.get('/admin/students', {
+    params: {
+      search: search.value,
+      branches: branchFilter.value.join(','),
+      graduation_years: yearFilter.value.join(','),
+      placement_status: placementStatus.value,
+      min_cgpa: minCgpa.value ?? '',
+      max_cgpa: maxCgpa.value ?? '',
+    },
+  })
   students.value = data.results
 }
 
 const debouncedLoad = debounce(load, 300)
-watch(search, debouncedLoad)
+watch([search, branchFilter, yearFilter, placementStatus, minCgpa, maxCgpa], debouncedLoad, { deep: true })
 
 onMounted(async () => {
   const { data } = await api.get('/auth/branches')

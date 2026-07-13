@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="modelValue" class="modal d-block pp-modal-backdrop" tabindex="-1">
-      <div class="modal-dialog" :class="fullWidth ? 'modal-fullscreen' : 'modal-lg modal-dialog-scrollable'">
+      <div class="modal-dialog modal-dialog-scrollable modal-dialog-centered" :class="fullWidth ? 'modal-xl' : 'modal-lg'">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">{{ title }}</h5>

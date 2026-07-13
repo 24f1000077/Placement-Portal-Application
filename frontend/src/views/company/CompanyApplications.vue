@@ -3,14 +3,15 @@
   <AppLayout>
     <h1 class="h4 mb-4">Applications</h1>
 
+    <div v-if="pinnedDriveLabel" class="alert alert-info py-2 d-flex align-items-center justify-content-between mb-3">
+      <span>Showing applicants for <strong>{{ pinnedDriveLabel }}</strong></span>
+      <button class="btn btn-sm btn-outline-secondary" @click="driveIds = []">Clear filter</button>
+    </div>
+
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <input v-model="search" type="search" class="form-control" style="max-width: 240px;" placeholder="Search student name…" />
       <MultiSelectDropdown label="Drive" :options="driveOptions" v-model="driveIds" />
-      <select v-model="driveState" class="form-select" style="max-width: 180px;">
-        <option value="">All Drives</option>
-        <option value="open">Open Drives</option>
-        <option value="closed">Closed Drives</option>
-      </select>
+      <MultiSelectDropdown label="Drive Status" :options="driveStatusOptions" v-model="driveStatuses" />
       <span class="text-muted small ms-auto">{{ applications.length }} record(s)</span>
     </div>
 
@@ -40,7 +41,7 @@
           <div class="col-md-2"><div class="text-muted small">CGPA</div><div class="fw-semibold">{{ detail.student_cgpa }}</div></div>
           <div class="col-md-4">
             <div class="text-muted small">Resume</div>
-            <button v-if="detail.has_resume" class="btn btn-sm btn-outline-secondary mt-1" @click="downloadFile(`/company/applications/${detail.id}/resume`, 'resume.pdf')">Download Resume</button>
+            <button v-if="detail.has_resume" class="btn btn-sm btn-outline-secondary mt-1" @click="downloadFile(`/company/applications/${detail.id}/resume`, studentFileName(detail.student_name, 'resume.pdf'))">Download Resume</button>
             <div v-else class="fw-semibold">Not uploaded</div>
           </div>
         </div>
@@ -53,7 +54,7 @@
 
         <div class="d-flex flex-wrap gap-2 mt-4">
           <button v-if="detail.status === 'APPLIED'" class="btn btn-sm btn-primary" @click="setStatus('SHORTLISTED')">Shortlist</button>
-          <button v-if="detail.status === 'SHORTLISTED'" class="btn btn-sm btn-primary" @click="setStatus('INTERVIEW')">Move to Interview</button>
+          <button v-if="detail.status === 'SHORTLISTED'" class="btn btn-sm btn-primary" @click="scheduleOpen = true">Schedule Interview</button>
           <template v-if="detail.status === 'INTERVIEW'">
             <button class="btn btn-sm btn-outline-primary" @click="scheduleOpen = true">Schedule Interview</button>
             <button class="btn btn-sm btn-primary" @click="openOffer">Make an Offer</button>
@@ -88,7 +89,7 @@
           <div class="col-6"><span class="text-muted">Offered Salary:</span> {{ detail.offered_salary }}</div>
           <div class="col-6"><span class="text-muted">Joining Date:</span> {{ formatDate(detail.offered_joining_date) }}</div>
         </div>
-        <button v-if="detail.has_offer_letter" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/company/applications/${detail.id}/offer-letter`, 'offer_letter.pdf')">Download Offer Letter</button>
+        <button v-if="detail.has_offer_letter" class="btn btn-sm btn-outline-secondary" @click="downloadFile(`/company/applications/${detail.id}/offer-letter`, studentFileName(detail.student_name, 'offer_letter.pdf'))">Download Offer Letter</button>
       </div>
     </Modal>
 
@@ -139,7 +140,8 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
@@ -148,13 +150,23 @@ import PipelineGraph from '@/components/shared/PipelineGraph.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
 import { formatDate, formatDateTime, nowForDateTimeLocal, todayForDateInput } from '@/utils/date'
-import { downloadFile } from '@/utils/download'
+import { downloadFile, studentFileName } from '@/utils/download'
+
+const route = useRoute()
 
 const applications = ref([])
 const driveOptions = ref([])
+const driveStatusOptions = ref([])
 const search = ref('')
 const driveIds = ref([])
-const driveState = ref('')
+const driveStatuses = ref([])
+
+// Shows which drive the list is currently pinned to, when arriving via a "View Applicants" link.
+const pinnedDriveLabel = computed(() => {
+  if (driveIds.value.length !== 1) return ''
+  const match = driveOptions.value.find((d) => d.value === driveIds.value[0])
+  return match ? match.label : ''
+})
 
 const viewOpen = ref(false)
 const viewOfferOpen = ref(false)
@@ -173,17 +185,23 @@ let offerFile = null
 // Fetches the company's applications for the active search/filter state.
 async function load() {
   const { data } = await api.get('/company/applications', {
-    params: { search: search.value, drive_ids: driveIds.value.join(','), drive_state: driveState.value },
+    params: { search: search.value, drive_ids: driveIds.value.join(','), drive_status: driveStatuses.value.join(',') },
   })
   applications.value = data.results
 }
 
 const debouncedLoad = debounce(load, 300)
-watch([search, driveIds, driveState], debouncedLoad, { deep: true })
+watch([search, driveIds, driveStatuses], debouncedLoad, { deep: true })
 
 onMounted(async () => {
   const { data } = await api.get('/company/drives')
   driveOptions.value = data.results.map((d) => ({ value: d.id, label: d.job_title }))
+  // Builds the drive-status filter options from the company's own drives, fetched via the API
+  driveStatusOptions.value = [...new Set(data.results.map((d) => d.status))]
+  // Pre-apply a drive filter passed in via a "View Applicants" link from the Placement Drives page.
+  if (route.query.drive_id) {
+    driveIds.value = [Number(route.query.drive_id)]
+  }
   await load()
 })
 

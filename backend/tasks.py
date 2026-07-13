@@ -94,15 +94,19 @@ def generate_monthly_report():
 
 
 @celery.task(name='tasks.export_applications_csv')
-def export_applications_csv(student_id):
+def export_applications_csv(student_id, statuses=None):
     student = StudentProfile.query.get(student_id)
     if not student:
         return {'csv': '', 'filename': 'applications.csv'}
 
+    applications = student.applications
+    if statuses:
+        applications = [a for a in applications if a.status.name in statuses]
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(['Student ID', 'Company Name', 'Drive Title', 'Status', 'Application Date'])
-    for application in student.applications:
+    for application in applications:
         writer.writerow([
             student.id,
             application.drive.company.company_name,
@@ -110,4 +114,5 @@ def export_applications_csv(student_id):
             application.status.name,
             application.application_date.isoformat() if application.application_date else '',
         ])
-    return {'csv': buffer.getvalue(), 'filename': f'applications_{student.id}.csv'}
+    filename = f'placement_history_{student.id}.csv' if statuses else f'applications_{student.id}.csv'
+    return {'csv': buffer.getvalue(), 'filename': filename}

@@ -108,7 +108,6 @@ class PlacementDrive(db.Model):
     job_description = db.Column(db.Text)
     location = db.Column(db.String(255))
     job_type = db.Column(db.String(50))
-    contact_phone = db.Column(db.String(20))
     application_deadline = db.Column(db.DateTime)
     cgpa = db.Column(db.Float, default=0.0)
     target_year = db.Column(db.Integer, nullable=True)

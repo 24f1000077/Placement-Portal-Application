@@ -68,7 +68,7 @@ def make_drive(company, job_title, status, cgpa, target_year, branch_names, days
     branches = Branch.query.filter(Branch.name.in_(branch_names)).all()
     drive = PlacementDrive(
         company_id=company.id, job_title=job_title, job_description=f'{job_title} role at {company.company_name}.',
-        location='Bengaluru', job_type='Full-time', contact_phone='9876500000',
+        location='Bengaluru', job_type='Full-time',
         application_deadline=datetime.now(timezone.utc) + timedelta(days=days_from_now),
         cgpa=cgpa, target_year=target_year, skills_required=skills, salary=salary,
         status=status, allowed_branches=branches,
