@@ -3,8 +3,11 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, send_file
 import io
 
+from celery import Celery
+from celery.result import AsyncResult
 from flask_jwt_extended import get_jwt_identity
 
+import config
 from models import (
     db, User, StudentProfile,
     PlacementDrive, PlacementDriveStatus,
@@ -16,6 +19,9 @@ from utils import role_required, error
 from app import cache
 
 student_bp = Blueprint('student', __name__)
+
+# Lightweight client used only to enqueue/poll tasks; the worker process (celery_workers.py) owns execution.
+task_client = Celery(broker=config.CELERY_BROKER_URL, backend=config.CELERY_RESULT_BACKEND)
 
 PHONE_RE = re.compile(r'^\d{7,15}$')
 ACTIVE_STATUSES = [ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER]
@@ -208,3 +214,35 @@ def download_resume():
     if not student.resume:
         return error('No resume uploaded yet.', 404)
     return send_file(io.BytesIO(student.resume), mimetype='application/pdf', download_name='resume.pdf')
+
+
+# ---- Async CSV export ----
+
+@student_bp.route('/applications/export', methods=['POST'])
+@role_required('STUDENT')
+def export_applications():
+    student = current_student()
+    task = task_client.send_task('tasks.export_applications_csv', args=[student.id])
+    return jsonify({'task_id': task.id}), 202
+
+
+@student_bp.route('/applications/export/<task_id>', methods=['GET'])
+@role_required('STUDENT')
+def export_status(task_id):
+    result = AsyncResult(task_id, app=task_client)
+    return jsonify({'state': result.state, 'ready': result.ready()})
+
+
+@student_bp.route('/applications/export/<task_id>/download', methods=['GET'])
+@role_required('STUDENT')
+def export_download(task_id):
+    result = AsyncResult(task_id, app=task_client)
+    if not result.ready():
+        return error('Export is not ready yet.', 409)
+    payload = result.result
+    return send_file(
+        io.BytesIO(payload['csv'].encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=payload['filename'],
+    )

@@ -3,7 +3,12 @@
   <AppLayout>
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h1 class="h4 mb-0">My Applications</h1>
+      <button class="btn btn-outline-secondary" :disabled="exporting" @click="exportCsv">
+        {{ exporting ? 'Preparing export…' : 'Export to CSV' }}
+      </button>
     </div>
+
+    <div v-if="exportMessage" class="alert alert-success py-2">{{ exportMessage }}</div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <MultiSelectDropdown label="Status" :options="STATUS_OPTIONS" v-model="statuses" />
@@ -116,6 +121,8 @@ const statuses = ref([])
 const viewOpen = ref(false)
 const detail = ref(null)
 const withdrawOpen = ref(false)
+const exporting = ref(false)
+const exportMessage = ref('')
 
 // Formats an ISO date string for display.
 function formatDate(iso) {
@@ -167,5 +174,30 @@ async function withdraw() {
   const { data } = await api.post(`/student/applications/${detail.value.id}/withdraw`)
   detail.value = data
   await Promise.all([load(), loadHistory()])
+}
+
+// Triggers the async CSV export and polls until it's ready, then downloads it.
+async function exportCsv() {
+  exporting.value = true
+  exportMessage.value = ''
+  const { data } = await api.post('/student/applications/export')
+  const taskId = data.task_id
+  const poll = async () => {
+    const { data: status } = await api.get(`/student/applications/export/${taskId}`)
+    if (!status.ready) {
+      setTimeout(poll, 1500)
+      return
+    }
+    const res = await api.get(`/student/applications/export/${taskId}/download`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'applications.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+    exporting.value = false
+    exportMessage.value = 'Your export is ready and the download has started.'
+  }
+  poll()
 }
 </script>
