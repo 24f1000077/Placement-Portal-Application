@@ -133,6 +133,9 @@ class Application(db.Model):
     application_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     status = db.Column(db.Enum(ApplicationStatus), default=ApplicationStatus.APPLIED)
     feedback = db.Column(db.Text)
+    offered_salary = db.Column(db.Float)
+    offered_joining_date = db.Column(db.Date)
+    offer_letter = db.Column(db.LargeBinary)
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=db.func.now())
 
