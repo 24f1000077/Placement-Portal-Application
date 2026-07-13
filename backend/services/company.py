@@ -72,9 +72,7 @@ def list_drives():
     branches = [b for b in request.args.get('branches', '').split(',') if b]
     if branches:
         q = q.join(drive_branches).join(Branch).filter(Branch.name.in_(branches))
-    sort = request.args.get('sort', 'created_at')
-    order = PlacementDrive.application_deadline.asc() if sort == 'deadline' else PlacementDrive.created_at.desc()
-    drives = q.order_by(order).all()
+    drives = q.order_by(PlacementDrive.created_at.desc()).all()
     return jsonify({'count': len(drives), 'results': [drive_to_dict(d) for d in drives]})
 
 
@@ -96,11 +94,14 @@ def validate_drive_payload(data):
     except (TypeError, ValueError):
         errors.append('Application deadline must be a future date.')
     try:
-        target_year = int(data.get('target_year'))
-        if target_year < 2026 or target_year > 2033:
+        min_target_year = int(data.get('min_target_year'))
+        max_target_year = int(data.get('max_target_year'))
+        if not (2026 <= min_target_year <= 2033) or not (2026 <= max_target_year <= 2033):
             raise ValueError()
+        if min_target_year > max_target_year:
+            errors.append('Minimum graduation year cannot be after maximum graduation year.')
     except (TypeError, ValueError):
-        errors.append('Target graduation year must be between 2026 and 2033.')
+        errors.append('Minimum and maximum graduation years must both be between 2026 and 2033.')
     try:
         salary = float(data.get('salary'))
         if salary <= 0:
@@ -130,7 +131,8 @@ def create_drive():
         job_type=data.get('job_type'),
         application_deadline=datetime.fromisoformat(data['application_deadline']),
         cgpa=float(data['cgpa']),
-        target_year=int(data['target_year']),
+        min_target_year=int(data['min_target_year']),
+        max_target_year=int(data['max_target_year']),
         skills_required=data.get('skills_required'),
         experience_required=data.get('experience_required'),
         salary=float(data['salary']),
@@ -164,7 +166,8 @@ def update_drive(drive_id):
     drive.job_type = data.get('job_type')
     drive.application_deadline = datetime.fromisoformat(data['application_deadline'])
     drive.cgpa = float(data['cgpa'])
-    drive.target_year = int(data['target_year'])
+    drive.min_target_year = int(data['min_target_year'])
+    drive.max_target_year = int(data['max_target_year'])
     drive.skills_required = data.get('skills_required')
     drive.experience_required = data.get('experience_required')
     drive.salary = float(data['salary'])
@@ -249,7 +252,7 @@ def list_applications():
     drive_statuses = [s for s in request.args.get('drive_status', '').split(',') if s]
     if drive_statuses:
         q = q.filter(PlacementDrive.status.in_([PlacementDriveStatus[s] for s in drive_statuses if s in PlacementDriveStatus.__members__]))
-    applications = q.order_by(Application.id.desc()).all()
+    applications = q.order_by(Application.application_date.desc()).all()
     results = [application_to_dict(a, include_interviews=False) for a in applications]
     if search:
         results = [r for r in results if search.lower() in r['student_name'].lower()]
@@ -374,9 +377,9 @@ def download_candidate_resume(application_id):
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
-    if not application.student.resume:
+    if not application.snapshot_resume:
         return error('No resume uploaded yet.', 404)
-    return send_file(io.BytesIO(application.student.resume), mimetype='application/pdf', download_name='resume.pdf')
+    return send_file(io.BytesIO(application.snapshot_resume), mimetype='application/pdf', download_name='resume.pdf')
 
 
 # ---- Interviews ----
@@ -392,7 +395,7 @@ def list_interviews():
     if drive_ids:
         q = q.filter(Application.drive_id.in_([int(d) for d in drive_ids]))
     student_name = request.args.get('student_name', '').strip()
-    order = InterviewSchedule.scheduled_date_time.desc() if request.args.get('sort') == 'newest' else InterviewSchedule.scheduled_date_time.asc()
+    order = InterviewSchedule.scheduled_date_time.asc() if request.args.get('sort') == 'oldest' else InterviewSchedule.scheduled_date_time.desc()
     interviews = q.order_by(order).all()
     results = []
     for interview in interviews:
@@ -419,21 +422,10 @@ def get_profile():
 @company_bp.route('/profile', methods=['PATCH'])
 @role_required('COMPANY')
 def update_profile():
+    # Company details (name, contact info, etc.) are managed by the admin only;
+    # a company may only change its own password from here.
     company = current_company()
     data = request.get_json(force=True) or {}
-    if 'name' in data and data['name'].strip():
-        company.user.name = data['name'].strip()
-    if 'company_name' in data and data['company_name'].strip():
-        company.company_name = data['company_name'].strip()
-    if 'hr_contact' in data:
-        contact = data['hr_contact'].strip()
-        if contact and not PHONE_RE.match(contact):
-            return error('Please provide a valid HR contact number.')
-        company.hr_contact = contact or None
-    if 'industry' in data:
-        company.industry = data['industry'].strip() or None
-    if 'website' in data:
-        company.website = data['website'].strip() or None
 
     password_error = apply_password_change(company.user, data)
     if password_error:

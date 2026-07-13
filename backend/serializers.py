@@ -16,6 +16,9 @@ def student_to_dict(student):
         'experience': student.experience,
         'has_resume': student.resume is not None,
         'is_placed': len(student.placements) > 0,
+        # Student/company profiles don't have their own timestamps; these are the linked account's.
+        'account_created_at': user.created_at.isoformat() if user.created_at else None,
+        'account_updated_at': user.updated_at.isoformat() if user.updated_at else None,
     }
 
 
@@ -32,6 +35,9 @@ def company_to_dict(company):
         'industry': company.industry,
         'website': company.website,
         'approval_status': company.approval_status.name,
+        # Company profiles don't have their own timestamps; these are the linked account's.
+        'account_created_at': user.created_at.isoformat() if user.created_at else None,
+        'account_updated_at': user.updated_at.isoformat() if user.updated_at else None,
     }
 
 
@@ -46,7 +52,8 @@ def drive_to_dict(drive, include_applicant_count=True):
         'job_type': drive.job_type,
         'application_deadline': drive.application_deadline.isoformat() if drive.application_deadline else None,
         'cgpa': drive.cgpa,
-        'target_year': drive.target_year,
+        'min_target_year': drive.min_target_year,
+        'max_target_year': drive.max_target_year,
         'skills_required': drive.skills_required,
         'experience_required': drive.experience_required,
         'salary': drive.salary,
@@ -55,6 +62,7 @@ def drive_to_dict(drive, include_applicant_count=True):
         'status': drive.status.name,
         'allowed_branches': [{'id': b.id, 'name': b.name} for b in drive.allowed_branches],
         'created_at': drive.created_at.isoformat() if drive.created_at else None,
+        'updated_at': drive.updated_at.isoformat() if drive.updated_at else None,
     }
     if include_applicant_count:
         payload['applicant_count'] = len(drive.applications)
@@ -71,6 +79,8 @@ def interview_to_dict(interview):
         'notes': interview.notes,
         'feedback': interview.feedback,
         'status': interview.status.name,
+        'created_at': interview.created_at.isoformat() if interview.created_at else None,
+        'updated_at': interview.updated_at.isoformat() if interview.updated_at else None,
     }
 
 
@@ -98,14 +108,19 @@ def application_to_dict(application, include_interviews=True):
         'student_id': student.id,
         'student_name': student.user.name,
         'student_email': student.user.email,
-        'student_cgpa': student.cgpa,
+        # cgpa/skills/experience/resume are a snapshot taken at application time, not the student's live profile.
+        'student_cgpa': application.snapshot_cgpa,
+        'student_skills': application.snapshot_skills,
+        'student_experience': application.snapshot_experience,
         'student_branch': student.branch_details.name if student.branch_details else None,
-        'has_resume': student.resume is not None,
+        'has_resume': application.snapshot_resume is not None,
         'drive_id': drive.id,
         'job_title': drive.job_title,
         'drive_status': drive.status.name,
         'company_id': drive.company_id,
         'company_name': drive.company.company_name,
+        'created_at': application.created_at.isoformat() if application.created_at else None,
+        'updated_at': application.updated_at.isoformat() if application.updated_at else None,
     }
     if include_interviews:
         payload['interviews'] = [interview_to_dict(i) for i in application.interviews]

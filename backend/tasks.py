@@ -7,7 +7,7 @@ from flask_mail import Message
 from celery_workers import celery
 from models import (
     db, mail, User, Role,
-    StudentProfile, CompanyProfile, CompanyStatus,
+    StudentProfile, CompanyProfile, CompanyStatus, StudentStatus,
     PlacementDrive, PlacementDriveStatus,
     Application, ApplicationStatus,
     Placement, NotificationLog,
@@ -23,8 +23,8 @@ def log_notification(job_type, recipient_email, status, error_message=None):
 
 @celery.task(name='tasks.send_daily_reminders')
 def send_daily_reminders():
-    now = datetime.now(timezone.utc)
-    window_end = now + timedelta(hours=24)
+    now = datetime.utcnow()
+    window_end = now + timedelta(hours=48)
     drives = PlacementDrive.query.filter(
         PlacementDrive.status == PlacementDriveStatus.APPROVED,
         PlacementDrive.application_deadline >= now,
@@ -32,20 +32,39 @@ def send_daily_reminders():
     ).all()
 
     sent = 0
+    students = StudentProfile.query.join(User).filter(
+        User.is_active == True,
+        StudentProfile.approval_status == StudentStatus.APPROVED
+    ).all()
+
     for drive in drives:
-        for application in drive.applications:
-            if application.status not in ACTIVE_STATUSES:
+        applied_student_ids = {app.student_id for app in drive.applications}
+        for student in students:
+            if student.id in applied_student_ids:
                 continue
-            student_email = application.student.user.email
+
+            # Branch eligibility check
+            if drive.allowed_branches and student.branch_id not in [b.id for b in drive.allowed_branches]:
+                continue
+
+            # Target graduation year check
+            if not (drive.min_target_year <= student.graduation_year <= drive.max_target_year):
+                continue
+
+            # CGPA eligibility check
+            if drive.cgpa and student.cgpa < drive.cgpa:
+                continue
+
+            student_email = student.user.email
             try:
                 mail.send(Message(
-                    subject=f'Reminder: {drive.job_title} application closes soon',
+                    subject=f'Reminder: Apply to {drive.job_title} at {drive.company.company_name}',
                     recipients=[student_email],
                     body=(
-                        f'Hi {application.student.user.name},\n\n'
-                        f'The application deadline for "{drive.job_title}" at {drive.company.company_name} '
-                        f'is on {drive.application_deadline.strftime("%d %b %Y, %H:%M")}. '
-                        'Make sure your application is up to date.\n\nPlacementPro'
+                        f'Hi {student.user.name},\n\n'
+                        f'Apply now for the placement drive "{drive.job_title}" at {drive.company.company_name}. '
+                        f'The application deadline is on {drive.application_deadline.strftime("%d %b %Y, %H:%M")}.\n'
+                        f'Don\'t miss this opportunity!\n\nPlacementPro'
                     ),
                 ))
                 log_notification('DAILY_REMINDER', student_email, 'sent')
@@ -57,7 +76,7 @@ def send_daily_reminders():
 
 @celery.task(name='tasks.generate_monthly_report')
 def generate_monthly_report():
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     period_start = (now.replace(day=1) - timedelta(days=1)).replace(day=1)
     period_end = now.replace(day=1)
 
@@ -94,19 +113,15 @@ def generate_monthly_report():
 
 
 @celery.task(name='tasks.export_applications_csv')
-def export_applications_csv(student_id, statuses=None):
+def export_applications_csv(student_id):
     student = StudentProfile.query.get(student_id)
     if not student:
         return {'csv': '', 'filename': 'applications.csv'}
 
-    applications = student.applications
-    if statuses:
-        applications = [a for a in applications if a.status.name in statuses]
-
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(['Student ID', 'Company Name', 'Drive Title', 'Status', 'Application Date'])
-    for application in applications:
+    for application in student.applications:
         writer.writerow([
             student.id,
             application.drive.company.company_name,
@@ -114,5 +129,5 @@ def export_applications_csv(student_id, statuses=None):
             application.status.name,
             application.application_date.isoformat() if application.application_date else '',
         ])
-    filename = f'placement_history_{student.id}.csv' if statuses else f'applications_{student.id}.csv'
-    return {'csv': buffer.getvalue(), 'filename': filename}
+    safe_name = student.user.name.strip().replace(' ', '_')
+    return {'csv': buffer.getvalue(), 'filename': f'{safe_name}_placement_history.csv'}

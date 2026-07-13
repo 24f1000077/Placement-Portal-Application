@@ -173,7 +173,7 @@ def list_drives():
     deadline_to = request.args.get('deadline_to')
     if deadline_to:
         q = q.filter(PlacementDrive.application_deadline < datetime.fromisoformat(deadline_to) + timedelta(days=1))
-    drives = q.order_by(PlacementDrive.id.desc()).all()
+    drives = q.order_by(PlacementDrive.created_at.desc()).all()
     return jsonify({'count': len(drives), 'results': [drive_to_dict(d) for d in drives]})
 
 
@@ -203,8 +203,16 @@ def update_drive(drive_id):
         if salary <= 0:
             return error('Salary must be a positive number.')
         drive.salary = salary
-    if 'target_year' in data:
-        drive.target_year = int(data['target_year'])
+    if 'min_target_year' in data or 'max_target_year' in data:
+        try:
+            min_target_year = int(data.get('min_target_year', drive.min_target_year))
+            max_target_year = int(data.get('max_target_year', drive.max_target_year))
+        except (TypeError, ValueError):
+            return error('Minimum and maximum graduation years must be numbers.')
+        if min_target_year > max_target_year:
+            return error('Minimum graduation year cannot be after maximum graduation year.')
+        drive.min_target_year = min_target_year
+        drive.max_target_year = max_target_year
     if 'application_deadline' in data:
         drive.application_deadline = datetime.fromisoformat(data['application_deadline'])
     if 'branch_ids' in data:
@@ -306,7 +314,7 @@ def list_applications():
     statuses = split_param('status')
     if statuses:
         q = q.filter(Application.status.in_([ApplicationStatus[s] for s in statuses if s in ApplicationStatus.__members__]))
-    applications = q.order_by(Application.id.desc()).all()
+    applications = q.order_by(Application.application_date.desc()).all()
     return jsonify({'count': len(applications), 'results': [application_to_dict(a, include_interviews=False) for a in applications]})
 
 
@@ -463,9 +471,9 @@ def download_student_resume(student_id):
 @role_required('ADMIN')
 def download_application_resume(application_id):
     application = Application.query.get_or_404(application_id)
-    if not application.student.resume:
+    if not application.snapshot_resume:
         return error('No resume uploaded yet.', 404)
-    return send_file(io.BytesIO(application.student.resume), mimetype='application/pdf', download_name='resume.pdf')
+    return send_file(io.BytesIO(application.snapshot_resume), mimetype='application/pdf', download_name='resume.pdf')
 
 
 @admin_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
@@ -494,7 +502,7 @@ def list_interviews():
     student_name = request.args.get('student_name', '').strip()
     if student_name:
         q = q.filter(User.name.ilike(f'%{student_name}%'))
-    order = InterviewSchedule.scheduled_date_time.desc() if request.args.get('sort') == 'newest' else InterviewSchedule.scheduled_date_time.asc()
+    order = InterviewSchedule.scheduled_date_time.asc() if request.args.get('sort') == 'oldest' else InterviewSchedule.scheduled_date_time.desc()
     interviews = q.order_by(order).all()
     results = []
     for interview in interviews:

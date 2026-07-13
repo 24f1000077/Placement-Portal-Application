@@ -36,8 +36,11 @@ def ineligibility_reasons(student, drive):
     reasons = []
     if drive.allowed_branches and student.branch_id not in [b.id for b in drive.allowed_branches]:
         reasons.append(f'This drive is open to {", ".join(b.name for b in drive.allowed_branches)} only.')
-    if drive.target_year and student.graduation_year != drive.target_year:
-        reasons.append(f'This drive targets the {drive.target_year} graduating batch; you are graduating in {student.graduation_year}.')
+    if not (drive.min_target_year <= student.graduation_year <= drive.max_target_year):
+        reasons.append(
+            f'This drive targets graduating batches {drive.min_target_year}–{drive.max_target_year}; '
+            f'you are graduating in {student.graduation_year}.'
+        )
     if drive.cgpa and student.cgpa < drive.cgpa:
         reasons.append(f'This drive requires a minimum CGPA of {drive.cgpa}; your CGPA is {student.cgpa}.')
     return reasons
@@ -114,7 +117,13 @@ def apply_to_drive(drive_id):
     if Application.query.filter_by(student_id=student.id, drive_id=drive.id).first():
         return error('You have already applied to this drive.', 409)
 
-    application = Application(student_id=student.id, drive_id=drive.id, status=ApplicationStatus.APPLIED)
+    application = Application(
+        student_id=student.id, drive_id=drive.id, status=ApplicationStatus.APPLIED,
+        snapshot_cgpa=student.cgpa,
+        snapshot_skills=student.skills,
+        snapshot_experience=student.experience,
+        snapshot_resume=student.resume,
+    )
     db.session.add(application)
     db.session.commit()
     cache.clear()
@@ -193,6 +202,16 @@ def download_offer_letter(application_id):
     return send_file(io.BytesIO(application.offer_letter), mimetype='application/pdf', download_name='offer_letter.pdf')
 
 
+@student_bp.route('/applications/<int:application_id>/resume', methods=['GET'])
+@role_required('STUDENT')
+def download_application_resume(application_id):
+    student = current_student()
+    application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
+    if not application.snapshot_resume:
+        return error('No resume was attached to this application.', 404)
+    return send_file(io.BytesIO(application.snapshot_resume), mimetype='application/pdf', download_name='resume.pdf')
+
+
 # ---- Profile ----
 
 @student_bp.route('/profile', methods=['GET'])
@@ -254,15 +273,11 @@ def download_resume():
 
 # ---- Async CSV export ----
 
-FINISHED_STATUSES = [ApplicationStatus.REJECTED.name, ApplicationStatus.WITHDRAWN.name, ApplicationStatus.PLACED.name]
-
-
 @student_bp.route('/applications/export', methods=['POST'])
 @role_required('STUDENT')
 def export_applications():
     student = current_student()
-    statuses = FINISHED_STATUSES if request.args.get('history') == 'true' else None
-    task = task_client.send_task('tasks.export_applications_csv', args=[student.id, statuses])
+    task = task_client.send_task('tasks.export_applications_csv', args=[student.id])
     return jsonify({'task_id': task.id}), 202
 
 

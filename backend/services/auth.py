@@ -39,13 +39,13 @@ def register_student():
     graduation_year = data.get('graduation_year')
     branch_id = data.get('branch_id')
 
-    if not name or not email or not password:
-        return error('Name, email and password are required.')
+    if not name or not email or not password or not contact_number:
+        return error('Name, email, password and contact number are required.')
     if not EMAIL_RE.match(email):
         return error('Please provide a valid email address.')
     if len(password) < 6:
         return error('Password must be at least 6 characters long.')
-    if contact_number and not PHONE_RE.match(contact_number):
+    if not PHONE_RE.match(contact_number):
         return error('Please provide a valid contact number.')
     try:
         cgpa = float(cgpa)
@@ -57,6 +57,8 @@ def register_student():
         graduation_year = int(graduation_year)
     except (TypeError, ValueError):
         return error('Graduation year must be a number.')
+    if graduation_year < 2020 or graduation_year > 2035:
+        return error('Graduation year must be between 2020 and 2035.')
     branch = Branch.query.get(branch_id)
     if not branch:
         return error('Please select a valid branch.')
@@ -94,13 +96,13 @@ def register_company():
     industry = (data.get('industry') or '').strip()
     website = (data.get('website') or '').strip()
 
-    if not name or not email or not password or not company_name:
-        return error('Name, email, password and company name are required.')
+    if not name or not email or not password or not company_name or not hr_contact:
+        return error('Name, email, password, company name and HR contact number are required.')
     if not EMAIL_RE.match(email):
         return error('Please provide a valid email address.')
     if len(password) < 6:
         return error('Password must be at least 6 characters long.')
-    if hr_contact and not PHONE_RE.match(hr_contact):
+    if not PHONE_RE.match(hr_contact):
         return error('Please provide a valid HR contact number.')
     if User.query.filter_by(email=email).first():
         return error('An account with this email already exists.')

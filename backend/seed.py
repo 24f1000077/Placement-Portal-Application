@@ -70,7 +70,7 @@ def make_drive(company, job_title, status, cgpa, target_year, branch_names, days
         company_id=company.id, job_title=job_title, job_description=f'{job_title} role at {company.company_name}.',
         location='Bengaluru', job_type='Full-time',
         application_deadline=datetime.now(timezone.utc) + timedelta(days=days_from_now),
-        cgpa=cgpa, target_year=target_year, skills_required=skills, salary=salary,
+        cgpa=cgpa, min_target_year=target_year, max_target_year=target_year, skills_required=skills, salary=salary,
         status=status, allowed_branches=branches,
     )
     db.session.add(drive)
@@ -85,6 +85,8 @@ def make_application(student, drive, status, offered_salary=None, joining_date=N
     application = Application(
         student_id=student.id, drive_id=drive.id, status=status,
         offered_salary=offered_salary, offered_joining_date=joining_date,
+        snapshot_cgpa=student.cgpa, snapshot_skills=student.skills,
+        snapshot_experience=student.experience, snapshot_resume=student.resume,
     )
     db.session.add(application)
     db.session.flush()

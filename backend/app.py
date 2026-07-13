@@ -42,17 +42,12 @@ def create_app():
     app.register_blueprint(company_bp, url_prefix='/api/company')
     app.register_blueprint(student_bp, url_prefix='/api/student')
 
-    register_cli(app)
-    return app
-
-
-def register_cli(app):
-    @app.cli.command('init-db')
-    def init_db():
+    with app.app_context():
         db.create_all()
         seed_branches()
         seed_admin()
-        print('Database initialized.')
+
+    return app
 
 
 def seed_branches():

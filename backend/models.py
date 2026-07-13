@@ -110,7 +110,8 @@ class PlacementDrive(db.Model):
     job_type = db.Column(db.String(50))
     application_deadline = db.Column(db.DateTime)
     cgpa = db.Column(db.Float, default=0.0)
-    target_year = db.Column(db.Integer, nullable=True)
+    min_target_year = db.Column(db.Integer, nullable=False)
+    max_target_year = db.Column(db.Integer, nullable=False)
     skills_required = db.Column(db.Text)
     experience_required = db.Column(db.String(100))
     salary = db.Column(db.Float)
@@ -135,6 +136,12 @@ class Application(db.Model):
     offered_salary = db.Column(db.Float)
     offered_joining_date = db.Column(db.Date)
     offer_letter = db.Column(db.LargeBinary)
+    # A point-in-time copy of the student's profile at the moment they applied, so later
+    # profile edits don't retroactively change what a company sees for this application.
+    snapshot_cgpa = db.Column(db.Float)
+    snapshot_skills = db.Column(db.Text)
+    snapshot_experience = db.Column(db.Text)
+    snapshot_resume = db.Column(db.LargeBinary)
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=db.func.now())
 

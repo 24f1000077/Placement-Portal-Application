@@ -25,7 +25,7 @@ MAIL_USE_TLS = False
 MAIL_USE_SSL = False
 MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'placementpro@institute.edu')
+MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'placementpro@placement.com')
 
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@placement.com')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
