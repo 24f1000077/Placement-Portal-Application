@@ -1,0 +1,93 @@
+/* Defines the shared color palette and cross-view utility classes. */
+:root {
+  --pp-primary: #2f3fa8;
+  --pp-primary-dark: #232f82;
+  --pp-accent: #0f9d8c;
+  --pp-bg: #f5f6fb;
+  --pp-surface: #ffffff;
+  --pp-border: #e2e4f0;
+  --pp-text: #1f2233;
+  --pp-text-muted: #6b6f8a;
+
+  --pp-status-pending: #b6790c;
+  --pp-status-pending-bg: #fdf1dc;
+  --pp-status-approved: #157a5b;
+  --pp-status-approved-bg: #e0f5ec;
+  --pp-status-rejected: #b3261e;
+  --pp-status-rejected-bg: #fbe3e1;
+  --pp-status-blacklisted: #7a1f22;
+  --pp-status-blacklisted-bg: #f5dcdd;
+  --pp-status-closed: #3b4252;
+  --pp-status-closed-bg: #e5e7ee;
+  --pp-status-cancelled: #4b4f58;
+  --pp-status-cancelled-bg: #dfe0e3;
+}
+
+body {
+  background: var(--pp-bg);
+  color: var(--pp-text);
+}
+
+/* Applies the shared card surface used across dashboard panels. */
+.pp-card {
+  background: var(--pp-surface);
+  border: 1px solid var(--pp-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(31, 34, 51, 0.06);
+}
+
+/* Applies a full-width row-hover highlight to data tables. */
+.pp-table tbody tr:hover {
+  background: #f0f1fa;
+}
+
+/* Styles a rounded-pill search input used on the student drives view. */
+.pp-search-pill {
+  border-radius: 999px;
+}
+
+/* Colors a status badge according to its state. */
+.pp-badge {
+  display: inline-block;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pp-badge-pending { color: var(--pp-status-pending); background: var(--pp-status-pending-bg); }
+.pp-badge-approved { color: var(--pp-status-approved); background: var(--pp-status-approved-bg); }
+.pp-badge-rejected { color: var(--pp-status-rejected); background: var(--pp-status-rejected-bg); }
+.pp-badge-blacklisted { color: var(--pp-status-blacklisted); background: var(--pp-status-blacklisted-bg); }
+.pp-badge-closed { color: var(--pp-status-closed); background: var(--pp-status-closed-bg); }
+.pp-badge-cancelled { color: #fff; background: var(--pp-status-cancelled); }
+
+/* Centers the login/registration card on a branded background. */
+.pp-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, var(--pp-primary) 0%, var(--pp-primary-dark) 100%);
+  padding: 2rem 1rem;
+}
+.pp-auth-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 2.25rem;
+}
+.pp-auth-brand {
+  color: var(--pp-primary);
+  font-weight: 700;
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.btn-primary {
+  background-color: var(--pp-primary);
+  border-color: var(--pp-primary);
+}
+.btn-primary:hover {
+  background-color: var(--pp-primary-dark);
+  border-color: var(--pp-primary-dark);
+}
