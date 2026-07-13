@@ -28,9 +28,9 @@
           </div>
           <button
             class="btn btn-primary btn-sm mt-auto"
-            :disabled="!d.eligible || d.already_applied"
+            :disabled="!d.eligible || d.already_applied || d.deadline_passed"
             @click="openApply(d)"
-          >{{ d.already_applied ? 'Already Applied' : 'Apply' }}</button>
+          >{{ d.already_applied ? 'Already Applied' : d.deadline_passed ? 'Deadline Passed' : 'Apply' }}</button>
         </div>
       </div>
       <div class="col-12" v-if="!drives.length"><p class="text-muted text-center py-4">No placement drives match your filters.</p></div>

@@ -64,9 +64,11 @@ def list_drives():
         eligible = is_eligible(student, drive)
         if eligible_only and not eligible:
             continue
+        deadline_passed = bool(drive.application_deadline and drive.application_deadline <= datetime.now(timezone.utc).replace(tzinfo=drive.application_deadline.tzinfo))
         payload = drive_to_dict(drive, include_applicant_count=False)
         payload['eligible'] = eligible
         payload['already_applied'] = drive.id in applied_drive_ids
+        payload['deadline_passed'] = deadline_passed
         results.append(payload)
     return jsonify({'count': len(results), 'results': results})
 
