@@ -44,8 +44,13 @@ def is_eligible(student, drive):
 
 # ---- Placement Drives ----
 
+def drives_cache_key():
+    return f'student-drives:{get_jwt_identity()}:{request.query_string.decode()}'
+
+
 @student_bp.route('/drives', methods=['GET'])
 @role_required('STUDENT')
+@cache.cached(timeout=60, key_prefix=drives_cache_key)
 def list_drives():
     student = current_student()
     q = PlacementDrive.query.filter_by(status=PlacementDriveStatus.APPROVED)
@@ -96,6 +101,7 @@ def apply_to_drive(drive_id):
     application = Application(student_id=student.id, drive_id=drive.id, status=ApplicationStatus.APPLIED)
     db.session.add(application)
     db.session.commit()
+    cache.clear()
     return jsonify(application_to_dict(application)), 201
 
 
