@@ -1,9 +1,266 @@
 <template>
+  <!-- Renders the admin placement drives management table with search, filters, and lifecycle actions. -->
   <AppLayout>
-    <h1 class="h4 mb-0">AdminDrives</h1>
+    <h1 class="h4 mb-4">Placement Drives</h1>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <input v-model="search" type="search" class="form-control" style="max-width: 240px;" placeholder="Search job title…" />
+      <MultiSelectDropdown label="Company" :options="companyOptions" v-model="companyIds" />
+      <MultiSelectDropdown label="Status" :options="STATUS_OPTIONS" v-model="statuses" />
+      <input v-model="skills" type="search" class="form-control" style="max-width: 180px;" placeholder="Skills…" />
+      <input v-model="minCgpa" type="number" min="0" max="10" step="0.1" class="form-control" style="max-width: 120px;" placeholder="Min CGPA" />
+      <span class="text-muted small ms-auto">{{ drives.length }} record(s)</span>
+    </div>
+
+    <div class="pp-card">
+      <table class="table pp-table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Job Title</th>
+            <th>Company</th>
+            <th>Target Year</th>
+            <th>Deadline</th>
+            <th>Min CGPA</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="d in drives" :key="d.id">
+            <td>{{ d.job_title }}</td>
+            <td>{{ d.company_name }}</td>
+            <td>{{ d.target_year || '—' }}</td>
+            <td>{{ formatDate(d.application_deadline) }}</td>
+            <td>{{ d.cgpa }}</td>
+            <td><StatusBadge :status="d.status" /></td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-secondary me-1" @click="openView(d)">View</button>
+              <template v-if="d.status === 'PENDING'">
+                <button class="btn btn-sm btn-outline-success me-1" @click="askConfirm(d, 'approve')">Approve</button>
+                <button class="btn btn-sm btn-outline-danger" @click="askConfirm(d, 'reject')">Reject</button>
+              </template>
+              <template v-else-if="d.status === 'APPROVED'">
+                <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
+                <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close</button>
+                <button class="btn btn-sm btn-outline-danger" @click="askConfirm(d, 'cancel')">Cancel</button>
+              </template>
+            </td>
+          </tr>
+          <tr v-if="!drives.length"><td colspan="7" class="text-center text-muted py-4">No placement drives found.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <Modal v-model="viewOpen" title="Placement Drive Details" full-width>
+      <form v-if="editing" class="row g-3" @submit.prevent="saveEdit">
+        <div class="col-md-6">
+          <label class="form-label">Job Title</label>
+          <input v-model="editing.job_title" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Location</label>
+          <input v-model="editing.location" class="form-control" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Job Description</label>
+          <textarea v-model="editing.job_description" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Minimum CGPA</label>
+          <input v-model.number="editing.cgpa" type="number" min="0" max="10" step="0.01" class="form-control" required />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Target Graduation Year</label>
+          <select v-model.number="editing.target_year" class="form-select">
+            <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Offered Salary</label>
+          <input v-model.number="editing.salary" type="number" min="0" step="0.01" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Skills Required</label>
+          <input v-model="editing.skills_required" class="form-control" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Contact Phone</label>
+          <input v-model="editing.contact_phone" class="form-control" pattern="\d{7,15}" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Application Deadline</label>
+          <input v-model="editing.application_deadline" type="datetime-local" class="form-control" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Job Type</label>
+          <input v-model="editing.job_type" class="form-control" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Eligible Branches</label>
+          <BranchTokenInput v-model="editing.branch_ids" :options="branches" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Notes</label>
+          <textarea v-model="editing.notes" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
+        </div>
+      </form>
+    </Modal>
+
+    <Modal v-model="extendOpen" title="Extend Application Deadline">
+      <form @submit.prevent="saveExtend">
+        <label class="form-label">New Deadline</label>
+        <input v-model="extendValue" type="datetime-local" class="form-control" :min="minDateTimeLocal" required />
+        <button type="submit" class="btn btn-primary mt-3" :disabled="saving">Extend Deadline</button>
+      </form>
+    </Modal>
+
+    <ConfirmDialog
+      v-model="confirmOpen"
+      :title="confirmTitle"
+      :message="confirmMessage"
+      :confirm-label="confirmLabel"
+      @confirm="runAction"
+    />
   </AppLayout>
 </template>
 
 <script setup>
+import { ref, watch, onMounted, computed } from 'vue'
 import AppLayout from '@/components/shared/AppLayout.vue'
+import Modal from '@/components/shared/Modal.vue'
+import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import StatusBadge from '@/components/shared/StatusBadge.vue'
+import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
+import BranchTokenInput from '@/components/shared/BranchTokenInput.vue'
+import api from '@/services/api'
+import { debounce } from '@/utils/debounce'
+
+const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'CLOSED', 'CANCELLED']
+const TARGET_YEARS = Array.from({ length: 8 }, (_, i) => 2026 + i)
+
+const drives = ref([])
+const companyOptions = ref([])
+const branches = ref([])
+const search = ref('')
+const companyIds = ref([])
+const statuses = ref([])
+const skills = ref('')
+const minCgpa = ref('')
+
+const viewOpen = ref(false)
+const editing = ref(null)
+const saving = ref(false)
+
+const extendOpen = ref(false)
+const extendValue = ref('')
+let extendTarget = null
+
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmMessage = ref('')
+const confirmLabel = ref('Confirm')
+let pendingAction = null
+let pendingDrive = null
+
+const minDateTimeLocal = computed(() => new Date(Date.now() + 60000).toISOString().slice(0, 16))
+
+// Formats an ISO date string for table display.
+function formatDate(iso) {
+  return iso ? new Date(iso).toLocaleString() : '—'
+}
+
+// Fetches the drive list for the active search/filter state.
+async function load() {
+  const { data } = await api.get('/admin/drives', {
+    params: {
+      search: search.value,
+      company_ids: companyIds.value.join(','),
+      status: statuses.value.join(','),
+      skills: skills.value,
+      min_cgpa: minCgpa.value || undefined,
+    },
+  })
+  drives.value = data.results
+}
+
+const debouncedLoad = debounce(load, 300)
+watch([search, companyIds, statuses, skills, minCgpa], debouncedLoad, { deep: true })
+
+onMounted(async () => {
+  const [companiesRes, branchesRes] = await Promise.all([
+    api.get('/admin/companies'),
+    api.get('/auth/branches'),
+  ])
+  companyOptions.value = companiesRes.data.results.map((c) => ({ value: c.id, label: c.company_name }))
+  branches.value = branchesRes.data
+  await load()
+})
+
+// Opens the full-width detail/edit modal for a drive.
+function openView(drive) {
+  editing.value = {
+    ...drive,
+    branch_ids: drive.allowed_branches.map((b) => b.id),
+    application_deadline: drive.application_deadline ? drive.application_deadline.slice(0, 16) : '',
+  }
+  viewOpen.value = true
+}
+
+// Saves the edited drive fields.
+async function saveEdit() {
+  saving.value = true
+  try {
+    await api.patch(`/admin/drives/${editing.value.id}`, editing.value)
+    viewOpen.value = false
+    await load()
+  } finally {
+    saving.value = false
+  }
+}
+
+// Opens the deadline-extension modal for a drive.
+function openExtend(drive) {
+  extendTarget = drive
+  extendValue.value = ''
+  extendOpen.value = true
+}
+
+// Submits the extended deadline.
+async function saveExtend() {
+  saving.value = true
+  try {
+    await api.post(`/admin/drives/${extendTarget.id}/extend-deadline`, { application_deadline: extendValue.value })
+    extendOpen.value = false
+    await load()
+  } finally {
+    saving.value = false
+  }
+}
+
+const ACTION_COPY = {
+  approve: { title: 'Approve Drive', message: 'Students will be able to see and apply to this drive. Continue?', label: 'Approve' },
+  reject: { title: 'Reject Drive', message: 'This rejects the placement drive request. Continue?', label: 'Reject' },
+  close: { title: 'Close Drive', message: 'This stops new applications to this drive. Continue?', label: 'Close' },
+  cancel: { title: 'Cancel Drive', message: 'This cancels the drive and rejects all active applications. Continue?', label: 'Cancel' },
+}
+
+// Opens the confirmation dialog for a given row action.
+function askConfirm(drive, action) {
+  pendingDrive = drive
+  pendingAction = action
+  const copy = ACTION_COPY[action]
+  confirmTitle.value = copy.title
+  confirmMessage.value = copy.message
+  confirmLabel.value = copy.label
+  confirmOpen.value = true
+}
+
+// Executes the confirmed lifecycle action against the API.
+async function runAction() {
+  await api.post(`/admin/drives/${pendingDrive.id}/${pendingAction}`)
+  await load()
+}
 </script>
