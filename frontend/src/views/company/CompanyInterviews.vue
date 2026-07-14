@@ -6,9 +6,9 @@
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <MultiSelectDropdown label="Drive" :options="driveOptions" v-model="driveIds" />
       <input v-model="studentName" type="search" class="form-control" style="max-width: 240px;" placeholder="Search candidate name…" />
-      <select v-model="sort" class="form-select" style="max-width: 200px;">
-        <option value="newest">Newest first</option>
-        <option value="oldest">Oldest first</option>
+      <select v-model="sort" class="form-select" style="max-width: 220px;" title="Sorts by the interview's scheduled date/time">
+        <option value="newest">Latest scheduled first</option>
+        <option value="oldest">Soonest scheduled first</option>
       </select>
       <span class="text-muted small ms-auto">{{ interviews.length }} record(s)</span>
     </div>

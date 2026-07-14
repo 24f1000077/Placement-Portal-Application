@@ -73,6 +73,9 @@
           <label class="form-label">Website</label>
           <input v-model="editing.website" type="url" class="form-control" />
         </div>
+        <div class="col-12 text-muted small">
+          Registered {{ formatDateTime(editing.account_created_at) }} · Last updated {{ formatDateTime(editing.account_updated_at) }}
+        </div>
         <div class="col-12">
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
         </div>
@@ -99,6 +102,7 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
+import { formatDateTime } from '@/utils/date'
 
 const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'BLACKLISTED']
 

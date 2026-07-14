@@ -93,6 +93,9 @@
           <label class="form-label">Experience</label>
           <textarea v-model="editing.experience" class="form-control" rows="2"></textarea>
         </div>
+        <div class="col-12 text-muted small">
+          Registered {{ formatDateTime(editing.account_created_at) }} · Last updated {{ formatDateTime(editing.account_updated_at) }}
+        </div>
         <div class="col-12">
           <button v-if="editing.has_resume" type="button" class="btn btn-outline-secondary me-2" @click="downloadFile(`/admin/students/${editing.id}/resume`, studentFileName(editing.name, 'resume.pdf'))">Download Resume</button>
           <span v-else class="text-muted small me-2">No resume uploaded.</span>
@@ -121,6 +124,7 @@ import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
 import { downloadFile, studentFileName } from '@/utils/download'
+import { formatDateTime } from '@/utils/date'
 
 const YEAR_OPTIONS = Array.from({ length: 16 }, (_, i) => 2020 + i)
 
@@ -133,7 +137,9 @@ const placementStatus = ref('')
 const minCgpa = ref(null)
 const maxCgpa = ref(null)
 
+// Branch names for the Branch filter dropdown.
 const branchOptions = computed(() => branches.value.map((b) => b.name))
+// Graduation years for the Graduation Year filter dropdown.
 const yearOptions = computed(() => YEAR_OPTIONS)
 
 const viewOpen = ref(false)

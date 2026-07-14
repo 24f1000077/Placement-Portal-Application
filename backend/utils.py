@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 def role_required(*roles):
+    # Route decorator: requires a valid JWT, one of the given role claims, and an active account, checked fresh on every request (not just at login).
     def decorator(fn):
         @wraps(fn)
         @jwt_required()
@@ -20,12 +21,14 @@ def role_required(*roles):
 
 
 def current_user_is_active():
+    # Looks up the current JWT's user row and returns its is_active flag.
     from models import User
     user = User.query.get(int(get_jwt_identity()))
     return user is not None and user.is_active
 
 
 def error(message, status=400):
+    # Shorthand for a JSON error response.
     return jsonify(message=message), status
 
 
@@ -37,13 +40,16 @@ def apply_password_change(user, data):
     requested change is invalid.
     """
     new_password = (data.get('new_password') or '').strip()
+    # No password fields submitted; nothing to change.
     if not new_password:
         return None
     current_password = (data.get('current_password') or '').strip()
+    # Current password must be supplied and match the stored hash.
     if not current_password or not check_password_hash(user.password, current_password):
         return error('Current password is incorrect.')
     if len(new_password) < 6:
         return error('New password must be at least 6 characters long.')
+    # Rejects setting the password to its current value.
     if check_password_hash(user.password, new_password):
         return error('New password must be different from your current password.')
     user.password = generate_password_hash(new_password)

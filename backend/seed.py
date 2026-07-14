@@ -20,6 +20,7 @@ app = create_app()
 
 
 def make_user(name, email, password, role):
+    # Returns the existing user for this email if one exists, otherwise creates it.
     user = User.query.filter_by(email=email).first()
     if user:
         return user
@@ -30,6 +31,7 @@ def make_user(name, email, password, role):
 
 
 def make_company(name, email, company_name, industry, website, status):
+    # Creates (or reuses) the login user, then attaches a CompanyProfile with the given status.
     user = make_user(name, email, email.split('@')[0], Role.COMPANY)
     if user.company_profile:
         return user.company_profile
@@ -37,6 +39,7 @@ def make_company(name, email, company_name, industry, website, status):
         user_id=user.id, company_name=company_name, hr_contact='9876500000',
         industry=industry, website=website, approval_status=status,
     )
+    # Mirrors production behavior: a blacklisted company's login is deactivated.
     if status == CompanyStatus.BLACKLISTED:
         user.is_active = False
     db.session.add(profile)
@@ -45,6 +48,7 @@ def make_company(name, email, company_name, industry, website, status):
 
 
 def make_student(name, email, branch_name, cgpa, grad_year, status, skills):
+    # Creates (or reuses) the login user, then attaches a StudentProfile with the given status.
     user = make_user(name, email, email.split('@')[0], Role.STUDENT)
     if user.student_profile:
         return user.student_profile
@@ -54,6 +58,7 @@ def make_student(name, email, branch_name, cgpa, grad_year, status, skills):
         cgpa=cgpa, graduation_year=grad_year, branch_id=branch.id, skills=skills,
         experience='Built a few academic and personal projects.',
     )
+    # Mirrors production behavior: a blacklisted student's login is deactivated.
     if status == StudentStatus.BLACKLISTED:
         user.is_active = False
     db.session.add(profile)
@@ -62,6 +67,7 @@ def make_student(name, email, branch_name, cgpa, grad_year, status, skills):
 
 
 def make_drive(company, job_title, status, cgpa, target_year, branch_names, days_from_now, skills, salary):
+    # Skips creation if this company already has a drive with the same title.
     existing = PlacementDrive.query.filter_by(company_id=company.id, job_title=job_title).first()
     if existing:
         return existing
@@ -79,9 +85,11 @@ def make_drive(company, job_title, status, cgpa, target_year, branch_names, days
 
 
 def make_application(student, drive, status, offered_salary=None, joining_date=None):
+    # Skips creation if this student has already applied to this drive.
     existing = Application.query.filter_by(student_id=student.id, drive_id=drive.id).first()
     if existing:
         return existing
+    # Copies the student's current profile fields onto the application snapshot columns.
     application = Application(
         student_id=student.id, drive_id=drive.id, status=status,
         offered_salary=offered_salary, offered_joining_date=joining_date,
@@ -95,11 +103,13 @@ def make_application(student, drive, status, offered_salary=None, joining_date=N
 
 def run():
     with app.app_context():
+        # Creates tables and seeds branches/admin, same as a normal app startup.
         db.create_all()
         seed_branches()
         seed_admin()
         db.session.commit()
 
+        # One company per CompanyStatus value, so every admin approval state has an example.
         acme = make_company('HR Priya', 'company1@placement.com', 'Acme Corp', 'Software', 'https://acme.example.com', CompanyStatus.APPROVED)
         beta = make_company('HR Rohan', 'company2@placement.com', 'Beta Inc', 'Finance', 'https://beta.example.com', CompanyStatus.APPROVED)
         make_company('HR Neha', 'company3@placement.com', 'Gamma Tech', 'Analytics', 'https://gamma.example.com', CompanyStatus.PENDING)
@@ -107,6 +117,7 @@ def run():
         make_company('HR Simran', 'company5@placement.com', 'Epsilon Labs', 'Biotech', 'https://epsilon.example.com', CompanyStatus.BLACKLISTED)
         db.session.commit()
 
+        # Ten students spanning every branch, a range of CGPAs/graduation years, and one blacklisted.
         students = [
             make_student('Aarav Shah', 'student1@placement.com', 'Computer Science', 8.7, 2027, StudentStatus.APPROVED, 'Python, React, SQL'),
             make_student('Diya Mehta', 'student2@placement.com', 'Information Technology', 7.9, 2027, StudentStatus.APPROVED, 'Java, Spring, AWS'),
@@ -121,6 +132,7 @@ def run():
         ]
         db.session.commit()
 
+        # Seven drives across both companies, one per PlacementDriveStatus value.
         d_swe = make_drive(acme, 'Software Engineer', PlacementDriveStatus.APPROVED, 7.0, 2027, ['Computer Science', 'Information Technology'], 30, 'Python, React, SQL', 1200000)
         d_data = make_drive(acme, 'Data Analyst', PlacementDriveStatus.PENDING, 6.5, 2028, ['Computer Science'], 25, 'SQL, Excel', 900000)
         d_devops = make_drive(acme, 'DevOps Engineer', PlacementDriveStatus.APPLICATIONS_CLOSED, 7.5, 2027, ['Computer Science', 'Information Technology'], 10, 'Docker, AWS', 1100000)
@@ -132,6 +144,7 @@ def run():
 
         aarav, diya, kabir, isha, vivaan, ananya, reyansh, myra, arjun, sara = students
 
+        # One application per ApplicationStatus value, spread across students and drives.
         make_application(aarav, d_swe, ApplicationStatus.APPLIED)
         make_application(diya, d_swe, ApplicationStatus.SHORTLISTED)
         app_interview = make_application(kabir, d_swe, ApplicationStatus.INTERVIEW)
@@ -143,6 +156,7 @@ def run():
         make_application(arjun, d_qa, ApplicationStatus.SHORTLISTED)
         db.session.commit()
 
+        # Schedules an upcoming interview for the INTERVIEW-stage application.
         if not app_interview.interviews:
             db.session.add(InterviewSchedule(
                 application_id=app_interview.id,
@@ -151,6 +165,7 @@ def run():
                 status=InterviewStatus.SCHEDULED,
             ))
 
+        # Creates the placement record for the PLACED-stage application.
         if not app_placed.placement:
             db.session.add(Placement(
                 student_id=ananya.id, company_id=beta.id, drive_id=d_pm.id, application_id=app_placed.id,

@@ -7,21 +7,25 @@ db = SQLAlchemy()
 mail = Mail()
 
 
+# Account type stored on every User row.
 class Role(Enum):
     ADMIN = 'Admin'
     COMPANY = 'Company'
     STUDENT = 'Student'
 
+# Admin approval state of a CompanyProfile.
 class CompanyStatus(Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
     BLACKLISTED = "blacklisted"
 
+# Admin approval state of a StudentProfile.
 class StudentStatus(Enum):
     APPROVED = "approved"
     BLACKLISTED = "blacklisted"
 
+# Lifecycle state of a PlacementDrive.
 class PlacementDriveStatus(Enum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -29,6 +33,7 @@ class PlacementDriveStatus(Enum):
     APPLICATIONS_CLOSED = "applications_closed"
     CANCELLED = "cancelled"
 
+# Stage of an Application as it moves through the hiring pipeline.
 class ApplicationStatus(Enum):
     APPLIED = "applied"
     SHORTLISTED = "shortlisted"
@@ -38,26 +43,31 @@ class ApplicationStatus(Enum):
     PLACED = "placed"
     WITHDRAWN = "withdrawn"
 
+# State of a single scheduled interview.
 class InterviewStatus(Enum):
     SCHEDULED = "scheduled"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
 
+# Login account shared by all three roles; holds credentials and links to the role-specific profile table (CompanyProfile or StudentProfile).
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     role = db.Column(db.Enum(Role), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
+    # Set to False to immediately revoke a user's access on their next request.
     is_active = db.Column(db.Boolean(), default=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=db.func.now())
 
+    # One-to-one links to the role-specific profile, deleted along with the user.
     company_profile = db.relationship('CompanyProfile', backref='user', uselist=False, cascade='all, delete-orphan')
     student_profile = db.relationship('StudentProfile', backref='user', uselist=False, cascade='all, delete-orphan')
 
 
+# Academic branch/department (e.g. Computer Science) used for student records and to restrict which students a placement drive is open to.
 class Branch(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -65,6 +75,7 @@ class Branch(db.Model):
     students = db.relationship('StudentProfile', backref='branch_details', lazy=True)
 
 
+# Company-specific profile fields, linked one-to-one to a User with role COMPANY.
 class CompanyProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
@@ -74,10 +85,12 @@ class CompanyProfile(db.Model):
     website = db.Column(db.String(255))
     approval_status = db.Column(db.Enum(CompanyStatus), default=CompanyStatus.PENDING)
 
+    # Drives are deleted along with the company; placements are kept for history.
     drives = db.relationship('PlacementDrive', backref='company', lazy=True, cascade='all, delete-orphan')
     placements = db.relationship('Placement', backref='company', lazy=True)
 
 
+# Student-specific profile fields, linked one-to-one to a User with role STUDENT.
 class StudentProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     contact_number = db.Column(db.String(20), nullable=True)
@@ -90,17 +103,19 @@ class StudentProfile(db.Model):
     experience = db.Column(db.Text, nullable=True)
     branch_id = db.Column(db.Integer, db.ForeignKey('branch.id'), nullable=False)
 
+    # Applications are deleted along with the student; placements are kept for history.
     applications = db.relationship('Application', backref='student', lazy=True, cascade='all, delete-orphan')
     placements = db.relationship('Placement', backref='student', lazy=True)
 
 
-# Many-to-many join table between placement drives and eligible branches.
+# Many-to-many join table between placement drives and the branches eligible to apply.
 drive_branches = db.Table('drive_branches',
     db.Column('drive_id', db.Integer, db.ForeignKey('placement_drive.id'), primary_key=True),
     db.Column('branch_id', db.Integer, db.ForeignKey('branch.id'), primary_key=True)
 )
 
 
+# A job posting created by a company, reviewed by admin, and applied to by students.
 class PlacementDrive(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company_profile.id'), nullable=False)
@@ -110,6 +125,7 @@ class PlacementDrive(db.Model):
     job_type = db.Column(db.String(50))
     application_deadline = db.Column(db.DateTime)
     cgpa = db.Column(db.Float, default=0.0)
+    # Range of graduating batches eligible to apply (can be the same year for both).
     min_target_year = db.Column(db.Integer, nullable=False)
     max_target_year = db.Column(db.Integer, nullable=False)
     skills_required = db.Column(db.Text)
@@ -121,11 +137,13 @@ class PlacementDrive(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=db.func.now())
 
+    # Branches allowed to apply; empty means every branch is eligible.
     allowed_branches = db.relationship('Branch', secondary=drive_branches, lazy='subquery', backref=db.backref('allowed_drives', lazy=True))
     applications = db.relationship('Application', backref='drive', lazy=True, cascade='all, delete-orphan')
     placements = db.relationship('Placement', backref='drive', lazy=True)
 
 
+# A single student's application to a single placement drive.
 class Application(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student_profile.id'), nullable=False)
@@ -145,12 +163,15 @@ class Application(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=db.func.now())
 
+    # Interviews are deleted with the application; a placement is created only on hire.
     interviews = db.relationship('InterviewSchedule', backref='application', lazy=True, cascade='all, delete-orphan')
     placement = db.relationship('Placement', backref='application', uselist=False, cascade='all, delete-orphan')
 
+    # A student may only have one application per drive.
     __table_args__ = (db.UniqueConstraint('student_id', 'drive_id', name='_student_drive_uc'),)
 
 
+# A single interview round scheduled against an application.
 class InterviewSchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     application_id = db.Column(db.Integer, db.ForeignKey('application.id'), nullable=False)
@@ -164,6 +185,7 @@ class InterviewSchedule(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=db.func.now())
 
 
+# Final placement record created once a student accepts an offer.
 class Placement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student_profile.id'), nullable=False)
@@ -177,6 +199,7 @@ class Placement(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
 
 
+# Audit trail of background email/notification jobs (reminders, reports) run by Celery.
 class NotificationLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     job_type = db.Column(db.String(100), nullable=False)

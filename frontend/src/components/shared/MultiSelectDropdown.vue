@@ -27,13 +27,13 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-// Resolves the underlying value for a string or {value,label} option.
+// Resolves the underlying value for a string/number or {value,label} option.
 function optionValue(opt) {
-  return typeof opt === 'string' ? opt : opt.value
+  return typeof opt === 'object' ? opt.value : opt
 }
-// Resolves the display label for a string or {value,label} option.
+// Resolves the display label for a string/number or {value,label} option.
 function optionLabel(opt) {
-  return typeof opt === 'string' ? opt : opt.label
+  return typeof opt === 'object' ? opt.label : opt
 }
 
 // Adds or removes a value from the selected set.

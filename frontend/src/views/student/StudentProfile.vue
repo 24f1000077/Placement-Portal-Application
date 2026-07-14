@@ -79,6 +79,7 @@ const formError = ref('')
 const passwords = ref({ current_password: '', new_password: '' })
 let resumeFile = null
 
+// Download filename for the student's own resume.
 const resumeFilename = computed(() => studentFileName(form.value?.name, 'resume.pdf'))
 
 // Loads the student's current profile into the form.

@@ -21,6 +21,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
+// Two-way bridge so the inner Modal's v-model updates this component's own v-model.
 const proxyOpen = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val),

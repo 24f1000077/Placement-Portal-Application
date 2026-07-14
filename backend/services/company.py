@@ -18,6 +18,8 @@ company_bp = Blueprint('company', __name__)
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 PHONE_RE = re.compile(r'^\d{7,15}$')
+# Allowed forward-only status transitions a company can apply via the pipeline endpoint;
+# rejection is handled separately.
 NEXT_STAGE = {
     ApplicationStatus.APPLIED: ApplicationStatus.SHORTLISTED,
     ApplicationStatus.SHORTLISTED: ApplicationStatus.INTERVIEW,
@@ -25,11 +27,13 @@ NEXT_STAGE = {
 
 
 def current_company():
+    # Resolves the CompanyProfile for the logged-in JWT's user.
     user = User.query.get(int(get_jwt_identity()))
     return user.company_profile
 
 
 def own_drive_or_404(drive_id):
+    # Returns the drive only if it belongs to the current company, else None.
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.company_id != current_company().id:
         return None
@@ -37,6 +41,7 @@ def own_drive_or_404(drive_id):
 
 
 def own_application_or_404(application_id):
+    # Returns the application only if its drive belongs to the current company, else None.
     application = Application.query.get_or_404(application_id)
     if application.drive.company_id != current_company().id:
         return None
@@ -48,6 +53,7 @@ def own_application_or_404(application_id):
 @company_bp.route('/overview', methods=['GET'])
 @role_required('COMPANY')
 def overview():
+    # Returns the company's profile plus every one of its drives with an applicant count.
     company = current_company()
     drives = [dict(drive_to_dict(d), applicant_count=len(d.applications)) for d in company.drives]
     return jsonify({'profile': company_to_dict(company), 'drives': drives})
@@ -58,6 +64,7 @@ def overview():
 @company_bp.route('/drives', methods=['GET'])
 @role_required('COMPANY')
 def list_drives():
+    # Lists this company's own drives, filterable by status/skills/CGPA/branch.
     company = current_company()
     q = PlacementDrive.query.filter_by(company_id=company.id)
     statuses = [s for s in request.args.get('status', '').split(',') if s]
@@ -77,6 +84,7 @@ def list_drives():
 
 
 def validate_drive_payload(data):
+    # Validates a create/update drive payload, collecting every error found rather than stopping at the first one.
     errors = []
     if not (data.get('job_title') or '').strip():
         errors.append('Job title is required.')
@@ -116,6 +124,7 @@ def validate_drive_payload(data):
 @company_bp.route('/drives', methods=['POST'])
 @role_required('COMPANY')
 def create_drive():
+    # Creates a new drive in PENDING status, awaiting admin approval.
     company = current_company()
     data = request.get_json(force=True) or {}
     errors = validate_drive_payload(data)
@@ -150,6 +159,7 @@ def create_drive():
 @company_bp.route('/drives/<int:drive_id>', methods=['PATCH'])
 @role_required('COMPANY')
 def update_drive(drive_id):
+    # Fully replaces an editable drive's fields; editing a rejected drive resets it to PENDING so admin re-reviews it.
     drive = own_drive_or_404(drive_id)
     if not drive:
         return error('Drive not found.', 404)
@@ -185,6 +195,7 @@ def update_drive(drive_id):
 @company_bp.route('/drives/<int:drive_id>/extend-deadline', methods=['POST'])
 @role_required('COMPANY')
 def extend_deadline(drive_id):
+    # Sets a new future deadline on this drive; usable on any status the company owns.
     drive = own_drive_or_404(drive_id)
     if not drive:
         return error('Drive not found.', 404)
@@ -204,6 +215,7 @@ def extend_deadline(drive_id):
 @company_bp.route('/drives/<int:drive_id>/close', methods=['POST'])
 @role_required('COMPANY')
 def close_drive(drive_id):
+    # Stops new applications to an approved drive without cancelling it outright.
     drive = own_drive_or_404(drive_id)
     if not drive:
         return error('Drive not found.', 404)
@@ -218,6 +230,7 @@ def close_drive(drive_id):
 @company_bp.route('/drives/<int:drive_id>/cancel', methods=['POST'])
 @role_required('COMPANY')
 def cancel_drive(drive_id):
+    # Cancels an approved drive and auto-rejects every application still in progress on it.
     drive = own_drive_or_404(drive_id)
     if not drive:
         return error('Drive not found.', 404)
@@ -238,6 +251,7 @@ def cancel_drive(drive_id):
 @company_bp.route('/applications', methods=['GET'])
 @role_required('COMPANY')
 def list_applications():
+    # Lists applications to this company's own drives, filterable by drive, drive open/closed state, drive status, and student name.
     company = current_company()
     q = Application.query.join(PlacementDrive).filter(PlacementDrive.company_id == company.id)
     search = request.args.get('search', '').strip()
@@ -254,6 +268,7 @@ def list_applications():
         q = q.filter(PlacementDrive.status.in_([PlacementDriveStatus[s] for s in drive_statuses if s in PlacementDriveStatus.__members__]))
     applications = q.order_by(Application.application_date.desc()).all()
     results = [application_to_dict(a, include_interviews=False) for a in applications]
+    # Name search is applied after serialization since it matches against the student's display name rather than a raw column.
     if search:
         results = [r for r in results if search.lower() in r['student_name'].lower()]
     return jsonify({'count': len(results), 'results': results})
@@ -262,6 +277,7 @@ def list_applications():
 @company_bp.route('/applications/<int:application_id>', methods=['GET'])
 @role_required('COMPANY')
 def get_application(application_id):
+    # Returns full application detail for one of this company's own applications.
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
@@ -271,6 +287,8 @@ def get_application(application_id):
 @company_bp.route('/applications/<int:application_id>/status', methods=['PATCH'])
 @role_required('COMPANY')
 def update_application_status(application_id):
+    # Advances an application one step forward per NEXT_STAGE, or rejects it outright;
+    # any other requested transition is refused.
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
@@ -289,6 +307,7 @@ def update_application_status(application_id):
 @company_bp.route('/applications/<int:application_id>/schedule-interview', methods=['POST'])
 @role_required('COMPANY')
 def schedule_interview(application_id):
+    # Creates an interview round for a shortlisted (or already interviewing) candidate.
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
@@ -320,6 +339,7 @@ def schedule_interview(application_id):
 @company_bp.route('/applications/<int:application_id>/offer', methods=['POST'])
 @role_required('COMPANY')
 def make_offer(application_id):
+    # Records an offer (salary, joining date, optional offer letter PDF) and moves the application to the Offer stage. Accepts either JSON or multipart form data.
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
@@ -363,6 +383,7 @@ def make_offer(application_id):
 @company_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
 @role_required('COMPANY')
 def download_offer_letter(application_id):
+    # Streams the offer letter PDF this company uploaded for this application.
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
@@ -374,6 +395,7 @@ def download_offer_letter(application_id):
 @company_bp.route('/applications/<int:application_id>/resume', methods=['GET'])
 @role_required('COMPANY')
 def download_candidate_resume(application_id):
+    # Streams the resume snapshot taken when the candidate applied, not their current profile.
     application = own_application_or_404(application_id)
     if not application:
         return error('Application not found.', 404)
@@ -387,6 +409,7 @@ def download_candidate_resume(application_id):
 @company_bp.route('/interviews', methods=['GET'])
 @role_required('COMPANY')
 def list_interviews():
+    # Lists interviews for this company's own applications, filterable by drive and candidate name, sortable by scheduled date/time.
     company = current_company()
     q = (InterviewSchedule.query
          .join(Application).join(PlacementDrive)
@@ -398,6 +421,7 @@ def list_interviews():
     order = InterviewSchedule.scheduled_date_time.asc() if request.args.get('sort') == 'oldest' else InterviewSchedule.scheduled_date_time.desc()
     interviews = q.order_by(order).all()
     results = []
+    # Candidate name filtering happens after the query since it's not a raw column here.
     for interview in interviews:
         application = interview.application
         if student_name and student_name.lower() not in application.student.user.name.lower():
@@ -416,6 +440,7 @@ def list_interviews():
 @company_bp.route('/profile', methods=['GET'])
 @role_required('COMPANY')
 def get_profile():
+    # Returns the current company's own profile.
     return jsonify(company_to_dict(current_company()))
 
 

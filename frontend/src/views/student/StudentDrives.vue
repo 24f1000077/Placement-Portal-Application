@@ -24,7 +24,7 @@
           <div class="text-muted small mb-2">{{ d.company_name }} · {{ d.location || 'Location TBD' }}</div>
           <p class="small flex-grow-1">{{ d.job_description }}</p>
           <div class="small text-muted mb-2">
-            Min CGPA: {{ d.cgpa }} · Target Year: {{ d.target_year }} · Deadline: {{ formatDate(d.application_deadline) }}
+            Min CGPA: {{ d.cgpa }} · Target Years: {{ targetYearRange(d) }} · Deadline: {{ formatDate(d.application_deadline) }}
           </div>
           <div class="d-flex gap-2 mt-auto">
             <button class="btn btn-outline-secondary btn-sm flex-grow-1" @click="openView(d)">View Details</button>
@@ -39,31 +39,6 @@
       <div class="col-12" v-if="!drives.length"><p class="text-muted text-center py-4">No placement drives match your filters.</p></div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-5 mb-3">
-      <h2 class="h5 mb-0">Placement History</h2>
-      <button class="btn btn-outline-secondary btn-sm" :disabled="exporting" @click="exportHistory">
-        {{ exporting ? 'Preparing export…' : 'Export to CSV' }}
-      </button>
-    </div>
-    <div v-if="exportMessage" class="alert alert-success py-2">{{ exportMessage }}</div>
-
-    <div class="pp-card">
-      <table class="table pp-table mb-0 align-middle">
-        <thead>
-          <tr><th>Company</th><th>Drive</th><th>Applied On</th><th>Outcome</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="a in history" :key="a.id">
-            <td>{{ a.company_name }}</td>
-            <td>{{ a.job_title }}</td>
-            <td>{{ formatDate(a.application_date) }}</td>
-            <td><StatusBadge :status="a.status" /></td>
-          </tr>
-          <tr v-if="!history.length"><td colspan="4" class="text-center text-muted py-4">No finished applications yet.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
     <Modal v-model="detailOpen" title="Placement Drive Details">
       <div v-if="detailTarget">
         <h2 class="h5">{{ detailTarget.job_title }}</h2>
@@ -71,7 +46,7 @@
         <p>{{ detailTarget.job_description }}</p>
         <div class="row g-2 small mb-3">
           <div class="col-6"><span class="text-muted">Minimum CGPA:</span> {{ detailTarget.cgpa }}</div>
-          <div class="col-6"><span class="text-muted">Target Year:</span> {{ detailTarget.target_year }}</div>
+          <div class="col-6"><span class="text-muted">Target Years:</span> {{ targetYearRange(detailTarget) }}</div>
           <div class="col-6"><span class="text-muted">Deadline:</span> {{ formatDateTime(detailTarget.application_deadline) }}</div>
           <div class="col-6"><span class="text-muted">Salary:</span> {{ detailTarget.salary }}</div>
           <div class="col-12"><span class="text-muted">Skills:</span> {{ detailTarget.skills_required || '—' }}</div>
@@ -100,7 +75,10 @@
         <p>You're applying to <strong>{{ applyTarget.job_title }}</strong> at <strong>{{ applyTarget.company_name }}</strong>.</p>
         <div class="pp-card p-3 mb-3">
           <div class="text-muted small mb-2">Your Profile Snapshot</div>
-          <div class="small">CGPA: {{ profile?.cgpa }} · Branch: {{ profile?.branch }} · Graduation Year: {{ profile?.graduation_year }}</div>
+          <div class="small mb-2">CGPA: {{ profile?.cgpa }} · Branch: {{ profile?.branch }} · Graduation Year: {{ profile?.graduation_year }}</div>
+          <div class="small text-muted mb-2">This is what gets attached to your application — update your profile first if it's out of date.</div>
+          <button v-if="profile?.has_resume" type="button" class="btn btn-sm btn-outline-secondary" @click="downloadFile('/student/profile/resume', studentFileName(profile.name, 'resume.pdf'))">View Resume</button>
+          <div v-else class="small text-muted">No resume uploaded yet.</div>
         </div>
         <button class="btn btn-primary" :disabled="applying" @click="confirmApply">
           {{ applying ? 'Submitting…' : 'Confirm & Apply' }}
@@ -119,9 +97,7 @@ import MultiSelectDropdown from '@/components/shared/MultiSelectDropdown.vue'
 import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
 import { formatDate, formatDateTime } from '@/utils/date'
-import { downloadFile } from '@/utils/download'
-
-const HISTORY_STATUSES = ['REJECTED', 'WITHDRAWN', 'PLACED']
+import { downloadFile, studentFileName } from '@/utils/download'
 
 const drives = ref([])
 const companyOptions = ref([])
@@ -131,16 +107,19 @@ const companyIds = ref([])
 const skills = ref('')
 const eligibleOnly = ref(false)
 
-const history = ref([])
-const exporting = ref(false)
-const exportMessage = ref('')
-
 const detailOpen = ref(false)
 const detailTarget = ref(null)
 
 const applyOpen = ref(false)
 const applyTarget = ref(null)
 const applying = ref(false)
+
+// Formats a drive's target-year range as a single value or "min–max".
+function targetYearRange(drive) {
+  return drive.min_target_year === drive.max_target_year
+    ? String(drive.min_target_year)
+    : `${drive.min_target_year}–${drive.max_target_year}`
+}
 
 // Fetches the approved drive list for the active search/filter state.
 async function load() {
@@ -158,12 +137,6 @@ async function load() {
 const debouncedLoad = debounce(load, 300)
 watch([search, companyIds, skills, eligibleOnly], debouncedLoad, { deep: true })
 
-// Fetches the finished (rejected/withdrawn/placed) applications for the history table.
-async function loadHistory() {
-  const { data } = await api.get('/student/applications', { params: { status: HISTORY_STATUSES.join(',') } })
-  history.value = data.results
-}
-
 onMounted(async () => {
   const [profileRes, companiesRes] = await Promise.all([
     api.get('/student/profile'),
@@ -171,27 +144,8 @@ onMounted(async () => {
   ])
   profile.value = profileRes.data
   companyOptions.value = companiesRes.data.map((c) => ({ value: c.id, label: c.name }))
-  await Promise.all([load(), loadHistory()])
+  await load()
 })
-
-// Triggers the async CSV export scoped to placement history and polls until it's ready, then downloads it.
-async function exportHistory() {
-  exporting.value = true
-  exportMessage.value = ''
-  const { data } = await api.post('/student/applications/export', null, { params: { history: 'true' } })
-  const taskId = data.task_id
-  const poll = async () => {
-    const { data: status } = await api.get(`/student/applications/export/${taskId}`)
-    if (!status.ready) {
-      setTimeout(poll, 1500)
-      return
-    }
-    await downloadFile(`/student/applications/export/${taskId}/download`, 'placement_history.csv')
-    exporting.value = false
-    exportMessage.value = 'Your export is ready and the download has started.'
-  }
-  poll()
-}
 
 // Opens the drive detail modal, available regardless of eligibility.
 function openView(drive) {

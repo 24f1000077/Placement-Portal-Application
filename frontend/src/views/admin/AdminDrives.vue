@@ -26,7 +26,7 @@
           <tr>
             <th>Job Title</th>
             <th>Company</th>
-            <th>Target Year</th>
+            <th>Target Years</th>
             <th>Deadline</th>
             <th>Min CGPA</th>
             <th>Status</th>
@@ -37,7 +37,7 @@
           <tr v-for="d in drives" :key="d.id">
             <td>{{ d.job_title }}</td>
             <td>{{ d.company_name }}</td>
-            <td>{{ d.target_year || '—' }}</td>
+            <td>{{ targetYearRange(d) }}</td>
             <td>{{ formatDateTime(d.application_deadline) }}</td>
             <td>{{ d.cgpa }}</td>
             <td><StatusBadge :status="d.status" /></td>
@@ -82,8 +82,14 @@
           <input v-model.number="editing.cgpa" type="number" min="0" max="10" step="0.01" class="form-control" required />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Target Graduation Year</label>
-          <select v-model.number="editing.target_year" class="form-select">
+          <label class="form-label">Min Graduation Year</label>
+          <select v-model.number="editing.min_target_year" class="form-select">
+            <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Max Graduation Year</label>
+          <select v-model.number="editing.max_target_year" class="form-select">
             <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
           </select>
         </div>
@@ -110,6 +116,9 @@
         <div class="col-12">
           <label class="form-label">Notes</label>
           <textarea v-model="editing.notes" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12 text-muted small">
+          Created {{ formatDateTime(editing.created_at) }} · Last updated {{ formatDateTime(editing.updated_at) }}
         </div>
         <div class="col-12">
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
@@ -151,6 +160,13 @@ import { formatDateTime, nowForDateTimeLocal } from '@/utils/date'
 const STATUS_OPTIONS = ['PENDING', 'APPROVED', 'REJECTED', 'APPLICATIONS_CLOSED', 'CANCELLED']
 const TARGET_YEARS = Array.from({ length: 8 }, (_, i) => 2026 + i)
 
+// Formats a drive's target-year range as a single value or "min–max".
+function targetYearRange(drive) {
+  return drive.min_target_year === drive.max_target_year
+    ? String(drive.min_target_year)
+    : `${drive.min_target_year}–${drive.max_target_year}`
+}
+
 const route = useRoute()
 const router = useRouter()
 
@@ -175,6 +191,7 @@ const companyFilterLabel = computed(() => {
   return match ? match.label : ''
 })
 
+// Removes the company filter pinned via a "View Drives" link.
 function clearCompanyFilter() {
   companyIds.value = []
 }

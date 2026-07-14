@@ -3,6 +3,8 @@ import { auth, homeForRole } from '@/utils/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  // Public routes (login/register) have no role; every other route is tagged with the
+  // single role allowed to view it and lazy-loads its component on first visit.
   routes: [
     { path: '/', redirect: '/login' },
     { path: '/login', name: 'login', component: () => import('@/views/public/Login.vue'), meta: { public: true } },
@@ -30,10 +32,12 @@ const router = createRouter({
 
 // Guards every route against the required auth/role state.
 router.beforeEach((to) => {
+  // Logged-in users hitting /login are redirected to their dashboard instead.
   if (to.meta.public) {
     if (auth.token && to.name === 'login') return homeForRole(auth.role)
     return true
   }
+  // Unauthenticated users are sent to login; wrong-role users are sent to their own dashboard.
   if (!auth.token) return '/login'
   if (to.meta.role && to.meta.role !== auth.role) return homeForRole(auth.role)
   return true

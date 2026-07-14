@@ -4,7 +4,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h1 class="h4 mb-0">My Applications</h1>
       <button class="btn btn-outline-secondary" :disabled="exporting" @click="exportCsv">
-        {{ exporting ? 'Preparing export…' : 'Export to CSV' }}
+        {{ exporting ? 'Preparing export…' : 'Export Placement History' }}
       </button>
     </div>
 
@@ -40,6 +40,15 @@
           <div class="col-md-4"><div class="text-muted small">Company</div><div class="fw-semibold">{{ detail.company_name }}</div></div>
           <div class="col-md-4"><div class="text-muted small">Drive</div><div class="fw-semibold">{{ detail.job_title }}</div></div>
           <div class="col-md-4"><div class="text-muted small">Applied On</div><div class="fw-semibold">{{ formatDateTime(detail.application_date) }}</div></div>
+          <div class="col-md-3"><div class="text-muted small">Branch</div><div class="fw-semibold">{{ detail.student_branch || '—' }}</div></div>
+          <div class="col-md-3"><div class="text-muted small">CGPA (at application)</div><div class="fw-semibold">{{ detail.student_cgpa }}</div></div>
+          <div class="col-md-6">
+            <div class="text-muted small">Resume (at application)</div>
+            <button v-if="detail.has_resume" type="button" class="btn btn-sm btn-outline-secondary mt-1" @click="downloadFile(`/student/applications/${detail.id}/resume`, studentFileName(detail.student_name, 'resume.pdf'))">Download Resume</button>
+            <div v-else class="fw-semibold">Not uploaded</div>
+          </div>
+          <div class="col-md-6"><div class="text-muted small">Skills (at application)</div><div class="fw-semibold">{{ detail.student_skills || '—' }}</div></div>
+          <div class="col-md-6"><div class="text-muted small">Experience (at application)</div><div class="fw-semibold">{{ detail.student_experience || '—' }}</div></div>
         </div>
 
         <PipelineGraph :status="detail.status" :interviews="detail.interviews" :has-placement="!!detail.placement" />
@@ -107,6 +116,7 @@ import api from '@/services/api'
 import { debounce } from '@/utils/debounce'
 import { formatDate, formatDateTime } from '@/utils/date'
 import { downloadFile, studentFileName } from '@/utils/download'
+import { auth } from '@/utils/auth'
 
 const STATUS_OPTIONS = ['APPLIED', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'PLACED', 'REJECTED', 'WITHDRAWN']
 
@@ -124,7 +134,9 @@ const exportMessage = ref('')
 
 // Fetches the applications list for the active search/filter state, newest first.
 async function load() {
-  const { data } = await api.get('/student/applications', { params: { search: search.value, status: statuses.value.join(',') } })
+  const { data } = await api.get('/student/applications', {
+    params: { search: search.value, status: statuses.value.join(',') },
+  })
   applications.value = data.results
 }
 
@@ -166,7 +178,7 @@ async function exportCsv() {
       setTimeout(poll, 1500)
       return
     }
-    await downloadFile(`/student/applications/export/${taskId}/download`, 'applications.csv')
+    await downloadFile(`/student/applications/export/${taskId}/download`, studentFileName(auth.name, 'placement_history.csv'))
     exporting.value = false
     exportMessage.value = 'Your export is ready and the download has started.'
   }

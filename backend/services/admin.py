@@ -18,10 +18,12 @@ from app import cache
 admin_bp = Blueprint('admin', __name__)
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+# Application stages that are still "in play" and eligible for auto-rejection/withdrawal when their drive or company is cancelled/blacklisted.
 ACTIVE_APPLICATION_STATUSES = [ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER]
 
 
 def split_param(name):
+    # Reads a comma-separated query string param into a list, dropping empty entries.
     raw = request.args.get(name, '')
     return [v for v in raw.split(',') if v]
 
@@ -29,6 +31,7 @@ def split_param(name):
 @admin_bp.route('/overview', methods=['GET'])
 @role_required('ADMIN')
 def overview():
+    # Returns headline counts for the admin dashboard landing page.
     return jsonify({
         'total_students': StudentProfile.query.count(),
         'total_companies_approved': CompanyProfile.query.filter_by(approval_status=CompanyStatus.APPROVED).count(),
@@ -42,6 +45,7 @@ def overview():
 @role_required('ADMIN')
 @cache.cached(timeout=60, query_string=True)
 def list_companies():
+    # Lists companies, filterable by name search and approval status; response is cached per distinct query string for 60 seconds.
     q = CompanyProfile.query.join(User)
     search = request.args.get('search', '').strip()
     if search:
@@ -56,6 +60,7 @@ def list_companies():
 @admin_bp.route('/companies/<int:company_id>', methods=['PATCH'])
 @role_required('ADMIN')
 def update_company(company_id):
+    # Updates any subset of a company's contact-person, email, and profile fields.
     company = CompanyProfile.query.get_or_404(company_id)
     data = request.get_json(force=True) or {}
 
@@ -88,6 +93,7 @@ def update_company(company_id):
 @admin_bp.route('/companies/<int:company_id>/approve', methods=['POST'])
 @role_required('ADMIN')
 def approve_company(company_id):
+    # Moves a pending company to APPROVED, allowing it to log in and post drives.
     company = CompanyProfile.query.get_or_404(company_id)
     if company.approval_status != CompanyStatus.PENDING:
         return error('Only pending companies can be approved.')
@@ -100,6 +106,7 @@ def approve_company(company_id):
 @admin_bp.route('/companies/<int:company_id>/reject', methods=['POST'])
 @role_required('ADMIN')
 def reject_company(company_id):
+    # Moves a pending company to REJECTED, permanently denying this registration.
     company = CompanyProfile.query.get_or_404(company_id)
     if company.approval_status != CompanyStatus.PENDING:
         return error('Only pending companies can be rejected.')
@@ -112,6 +119,7 @@ def reject_company(company_id):
 @admin_bp.route('/companies/<int:company_id>/blacklist', methods=['POST'])
 @role_required('ADMIN')
 def blacklist_company(company_id):
+    # Blacklists a company, deactivates its login, cancels its open drives, and auto-rejects every application under it that hasn't already resulted in a placement.
     company = CompanyProfile.query.get_or_404(company_id)
     if company.approval_status != CompanyStatus.APPROVED:
         return error('Only approved companies can be blacklisted.')
@@ -132,6 +140,8 @@ def blacklist_company(company_id):
 @admin_bp.route('/companies/<int:company_id>/whitelist', methods=['POST'])
 @role_required('ADMIN')
 def whitelist_company(company_id):
+    # Restores a blacklisted company to APPROVED and reactivates its login.
+    # Drives/applications rejected by the blacklist action are not automatically restored.
     company = CompanyProfile.query.get_or_404(company_id)
     if company.approval_status != CompanyStatus.BLACKLISTED:
         return error('Only blacklisted companies can be whitelisted.')
@@ -148,6 +158,7 @@ def whitelist_company(company_id):
 @role_required('ADMIN')
 @cache.cached(timeout=60, query_string=True)
 def list_drives():
+    # Lists placement drives with search/company/status/skills/CGPA/branch/deadline filters; response is cached per distinct query string for 60 seconds.
     q = PlacementDrive.query.join(CompanyProfile)
     search = request.args.get('search', '').strip()
     if search:
@@ -180,6 +191,7 @@ def list_drives():
 @admin_bp.route('/drives/<int:drive_id>', methods=['PATCH'])
 @role_required('ADMIN')
 def update_drive(drive_id):
+    # Updates any subset of a drive's fields; only touches what's present in the payload.
     drive = PlacementDrive.query.get_or_404(drive_id)
     data = request.get_json(force=True) or {}
 
@@ -226,6 +238,7 @@ def update_drive(drive_id):
 @admin_bp.route('/drives/<int:drive_id>/approve', methods=['POST'])
 @role_required('ADMIN')
 def approve_drive(drive_id):
+    # Moves a pending drive to APPROVED, making it visible to eligible students.
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status != PlacementDriveStatus.PENDING:
         return error('Only pending drives can be approved.')
@@ -238,6 +251,7 @@ def approve_drive(drive_id):
 @admin_bp.route('/drives/<int:drive_id>/reject', methods=['POST'])
 @role_required('ADMIN')
 def reject_drive(drive_id):
+    # Moves a pending drive to REJECTED.
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status != PlacementDriveStatus.PENDING:
         return error('Only pending drives can be rejected.')
@@ -250,6 +264,7 @@ def reject_drive(drive_id):
 @admin_bp.route('/drives/<int:drive_id>/close', methods=['POST'])
 @role_required('ADMIN')
 def close_drive(drive_id):
+    # Stops new applications to an approved drive without cancelling it outright.
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status != PlacementDriveStatus.APPROVED:
         return error('Only approved drives can be closed.')
@@ -262,6 +277,7 @@ def close_drive(drive_id):
 @admin_bp.route('/drives/<int:drive_id>/cancel', methods=['POST'])
 @role_required('ADMIN')
 def cancel_drive(drive_id):
+    # Cancels an approved drive and auto-rejects every application still in progress on it.
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status != PlacementDriveStatus.APPROVED:
         return error('Only approved drives can be cancelled.')
@@ -278,6 +294,7 @@ def cancel_drive(drive_id):
 @admin_bp.route('/drives/<int:drive_id>/extend-deadline', methods=['POST'])
 @role_required('ADMIN')
 def extend_deadline(drive_id):
+    # Sets a new future deadline; re-opens the drive if it had been closed.
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status not in (PlacementDriveStatus.APPROVED, PlacementDriveStatus.APPLICATIONS_CLOSED):
         return error('Only approved or applications-closed drives can have their deadline extended.')
@@ -301,6 +318,7 @@ def extend_deadline(drive_id):
 @admin_bp.route('/applications', methods=['GET'])
 @role_required('ADMIN')
 def list_applications():
+    # Lists applications across every company, filterable by student name, company, drive, and status; sorted by most recently applied first.
     q = Application.query.join(StudentProfile).join(PlacementDrive).join(CompanyProfile)
     search = request.args.get('search', '').strip()
     if search:
@@ -321,6 +339,7 @@ def list_applications():
 @admin_bp.route('/applications/<int:application_id>', methods=['GET'])
 @role_required('ADMIN')
 def get_application(application_id):
+    # Returns full application detail, including its interviews and placement if any.
     application = Application.query.get_or_404(application_id)
     return jsonify(application_to_dict(application))
 
@@ -328,6 +347,7 @@ def get_application(application_id):
 @admin_bp.route('/applications/<int:application_id>', methods=['PATCH'])
 @role_required('ADMIN')
 def update_application(application_id):
+    # Lets an admin correct an application's status, feedback, or offer details directly.
     application = Application.query.get_or_404(application_id)
     data = request.get_json(force=True) or {}
 
@@ -361,6 +381,7 @@ def update_application(application_id):
 @role_required('ADMIN')
 @cache.cached(timeout=60, query_string=True)
 def list_students():
+    # Lists students with name/email search, branch/graduation-year/CGPA-range/placement filters; response is cached per distinct query string for 60 seconds.
     q = StudentProfile.query.join(User)
     search = request.args.get('search', '').strip()
     if search:
@@ -389,6 +410,7 @@ def list_students():
 @admin_bp.route('/students/<int:student_id>', methods=['PATCH'])
 @role_required('ADMIN')
 def update_student(student_id):
+    # Updates any subset of a student's account and profile fields.
     student = StudentProfile.query.get_or_404(student_id)
     data = request.get_json(force=True) or {}
 
@@ -432,6 +454,7 @@ def update_student(student_id):
 @admin_bp.route('/students/<int:student_id>/blacklist', methods=['POST'])
 @role_required('ADMIN')
 def blacklist_student(student_id):
+    # Blacklists a student, deactivates their login, and withdraws every application of theirs that's still in progress.
     student = StudentProfile.query.get_or_404(student_id)
     if student.approval_status != StudentStatus.APPROVED:
         return error('Only active students can be blacklisted.')
@@ -448,6 +471,7 @@ def blacklist_student(student_id):
 @admin_bp.route('/students/<int:student_id>/whitelist', methods=['POST'])
 @role_required('ADMIN')
 def whitelist_student(student_id):
+    # Restores a blacklisted student to APPROVED and reactivates their login.
     student = StudentProfile.query.get_or_404(student_id)
     if student.approval_status != StudentStatus.BLACKLISTED:
         return error('Only blacklisted students can be whitelisted.')
@@ -461,6 +485,7 @@ def whitelist_student(student_id):
 @admin_bp.route('/students/<int:student_id>/resume', methods=['GET'])
 @role_required('ADMIN')
 def download_student_resume(student_id):
+    # Streams the student's current live resume as a PDF.
     student = StudentProfile.query.get_or_404(student_id)
     if not student.resume:
         return error('No resume uploaded yet.', 404)
@@ -470,6 +495,7 @@ def download_student_resume(student_id):
 @admin_bp.route('/applications/<int:application_id>/resume', methods=['GET'])
 @role_required('ADMIN')
 def download_application_resume(application_id):
+    # Streams the resume snapshot taken when this application was submitted, not the student's current profile resume.
     application = Application.query.get_or_404(application_id)
     if not application.snapshot_resume:
         return error('No resume uploaded yet.', 404)
@@ -479,6 +505,7 @@ def download_application_resume(application_id):
 @admin_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
 @role_required('ADMIN')
 def download_application_offer_letter(application_id):
+    # Streams the offer letter PDF the company uploaded for this application.
     application = Application.query.get_or_404(application_id)
     if not application.offer_letter:
         return error('No offer letter uploaded yet.', 404)
@@ -490,6 +517,7 @@ def download_application_offer_letter(application_id):
 @admin_bp.route('/interviews', methods=['GET'])
 @role_required('ADMIN')
 def list_interviews():
+    # Lists every scheduled interview campus-wide, filterable by drive/company or student name and sortable by scheduled date/time.
     q = (InterviewSchedule.query
          .join(Application).join(StudentProfile).join(User, StudentProfile.user_id == User.id)
          .join(PlacementDrive).join(CompanyProfile))
@@ -505,6 +533,7 @@ def list_interviews():
     order = InterviewSchedule.scheduled_date_time.asc() if request.args.get('sort') == 'oldest' else InterviewSchedule.scheduled_date_time.desc()
     interviews = q.order_by(order).all()
     results = []
+    # Adds student/drive/company names for display, since the base serializer doesn't join them.
     for interview in interviews:
         application = interview.application
         payload = interview_to_dict(interview)
@@ -520,6 +549,7 @@ def list_interviews():
 @admin_bp.route('/interviews/<int:interview_id>', methods=['PATCH'])
 @role_required('ADMIN')
 def update_interview(interview_id):
+    # Updates any subset of an interview's schedule, contact, notes, and status.
     interview = InterviewSchedule.query.get_or_404(interview_id)
     data = request.get_json(force=True) or {}
 

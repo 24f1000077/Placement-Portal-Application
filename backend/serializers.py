@@ -1,3 +1,4 @@
+# Converts a StudentProfile (plus its linked User) into a JSON-ready dict.
 def student_to_dict(student):
     user = student.user
     return {
@@ -22,6 +23,7 @@ def student_to_dict(student):
     }
 
 
+# Converts a CompanyProfile (plus its linked User) into a JSON-ready dict.
 def company_to_dict(company):
     user = company.user
     return {
@@ -41,6 +43,7 @@ def company_to_dict(company):
     }
 
 
+# Converts a PlacementDrive into a JSON-ready dict; applicant_count is omitted when the caller doesn't need it (e.g. lists a student can already see).
 def drive_to_dict(drive, include_applicant_count=True):
     payload = {
         'id': drive.id,
@@ -69,6 +72,7 @@ def drive_to_dict(drive, include_applicant_count=True):
     return payload
 
 
+# Converts an InterviewSchedule into a JSON-ready dict.
 def interview_to_dict(interview):
     return {
         'id': interview.id,
@@ -84,6 +88,7 @@ def interview_to_dict(interview):
     }
 
 
+# Converts a Placement into a JSON-ready dict.
 def placement_to_dict(placement):
     return {
         'id': placement.id,
@@ -94,6 +99,7 @@ def placement_to_dict(placement):
     }
 
 
+# Converts an Application into a JSON-ready dict, including its drive and student summary fields; interviews/placement are nested in only when the caller asks for them.
 def application_to_dict(application, include_interviews=True):
     student = application.student
     drive = application.drive

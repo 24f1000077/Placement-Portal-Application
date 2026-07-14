@@ -6,9 +6,9 @@
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <input v-model="driveOrCompany" type="search" class="form-control" style="max-width: 240px;" placeholder="Search drive or company…" />
       <input v-model="studentName" type="search" class="form-control" style="max-width: 240px;" placeholder="Search student name…" />
-      <select v-model="sort" class="form-select" style="max-width: 200px;">
-        <option value="newest">Newest first</option>
-        <option value="oldest">Oldest first</option>
+      <select v-model="sort" class="form-select" style="max-width: 220px;" title="Sorts by the interview's scheduled date/time">
+        <option value="newest">Latest scheduled first</option>
+        <option value="oldest">Soonest scheduled first</option>
       </select>
       <span class="text-muted small ms-auto">{{ interviews.length }} record(s)</span>
     </div>
@@ -70,6 +70,9 @@
         <div class="col-12">
           <label class="form-label">Feedback</label>
           <textarea v-model="editing.feedback" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12 text-muted small">
+          Created {{ formatDateTime(editing.created_at) }} · Last updated {{ formatDateTime(editing.updated_at) }}
         </div>
         <div class="col-12">
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>

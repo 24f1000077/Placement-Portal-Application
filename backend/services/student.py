@@ -24,15 +24,18 @@ student_bp = Blueprint('student', __name__)
 task_client = Celery(broker=config.CELERY_BROKER_URL, backend=config.CELERY_RESULT_BACKEND)
 
 PHONE_RE = re.compile(r'^\d{7,15}$')
+# Application stages a student can still withdraw from.
 ACTIVE_STATUSES = [ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER]
 
 
 def current_student():
+    # Resolves the StudentProfile for the logged-in JWT's user.
     user = User.query.get(int(get_jwt_identity()))
     return user.student_profile
 
 
 def ineligibility_reasons(student, drive):
+    # Returns a list of human-readable reasons the student doesn't qualify for the drive (branch, graduation year range, CGPA); empty list means eligible.
     reasons = []
     if drive.allowed_branches and student.branch_id not in [b.id for b in drive.allowed_branches]:
         reasons.append(f'This drive is open to {", ".join(b.name for b in drive.allowed_branches)} only.')
@@ -53,6 +56,7 @@ def is_eligible(student, drive):
 # ---- Placement Drives ----
 
 def drives_cache_key():
+    # Cache key scoped per-student (not just per query string) so one student's cachedresults are never served to another.
     return f'student-drives:{get_jwt_identity()}:{request.query_string.decode()}'
 
 
@@ -60,6 +64,8 @@ def drives_cache_key():
 @role_required('STUDENT')
 @cache.cached(timeout=60, key_prefix=drives_cache_key)
 def list_drives():
+    # Lists approved drives with each one annotated with this student's eligibility,
+    # whether they've already applied, and whether the deadline has passed.
     student = current_student()
     q = PlacementDrive.query.filter_by(status=PlacementDriveStatus.APPROVED)
     search = request.args.get('search', '').strip()
@@ -96,6 +102,7 @@ def list_drives():
 @student_bp.route('/companies', methods=['GET'])
 @role_required('STUDENT')
 def list_companies_with_drives():
+    # Lists only companies that currently have at least one approved drive, for the company filter dropdown on the drives page.
     companies = (CompanyProfile.query
                  .join(PlacementDrive, PlacementDrive.company_id == CompanyProfile.id)
                  .filter(PlacementDrive.status == PlacementDriveStatus.APPROVED)
@@ -106,6 +113,7 @@ def list_companies_with_drives():
 @student_bp.route('/drives/<int:drive_id>/apply', methods=['POST'])
 @role_required('STUDENT')
 def apply_to_drive(drive_id):
+    # Creates an application, checking the drive is open, on time, the student is eligible, and they haven't already applied.
     student = current_student()
     drive = PlacementDrive.query.get_or_404(drive_id)
     if drive.status != PlacementDriveStatus.APPROVED:
@@ -117,6 +125,7 @@ def apply_to_drive(drive_id):
     if Application.query.filter_by(student_id=student.id, drive_id=drive.id).first():
         return error('You have already applied to this drive.', 409)
 
+    # Copies the student's current profile fields onto the application snapshot columns.
     application = Application(
         student_id=student.id, drive_id=drive.id, status=ApplicationStatus.APPLIED,
         snapshot_cgpa=student.cgpa,
@@ -135,6 +144,7 @@ def apply_to_drive(drive_id):
 @student_bp.route('/applications', methods=['GET'])
 @role_required('STUDENT')
 def list_applications():
+    # Lists this student's own applications, filterable by status, newest first.
     student = current_student()
     q = Application.query.filter_by(student_id=student.id)
     statuses = [s for s in request.args.get('status', '').split(',') if s]
@@ -142,6 +152,7 @@ def list_applications():
         q = q.filter(Application.status.in_([ApplicationStatus[s] for s in statuses if s in ApplicationStatus.__members__]))
     applications = q.order_by(Application.application_date.desc()).all()
     results = [application_to_dict(a, include_interviews=False) for a in applications]
+    # Company/job-title search is applied after serialization.
     search = request.args.get('search', '').strip().lower()
     if search:
         results = [r for r in results if search in r['company_name'].lower() or search in r['job_title'].lower()]
@@ -151,6 +162,7 @@ def list_applications():
 @student_bp.route('/applications/<int:application_id>', methods=['GET'])
 @role_required('STUDENT')
 def get_application(application_id):
+    # Returns full detail for one of this student's own applications.
     student = current_student()
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
     return jsonify(application_to_dict(application))
@@ -159,6 +171,7 @@ def get_application(application_id):
 @student_bp.route('/applications/<int:application_id>/withdraw', methods=['POST'])
 @role_required('STUDENT')
 def withdraw_application(application_id):
+    # Withdraws an application that's still active (not already final).
     student = current_student()
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
     if application.status not in ACTIVE_STATUSES:
@@ -171,6 +184,7 @@ def withdraw_application(application_id):
 @student_bp.route('/applications/<int:application_id>/accept-offer', methods=['POST'])
 @role_required('STUDENT')
 def accept_offer(application_id):
+    # Accepts a pending offer: creates the final Placement record and marks the application PLACED.
     student = current_student()
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
     if application.status != ApplicationStatus.OFFER:
@@ -195,6 +209,7 @@ def accept_offer(application_id):
 @student_bp.route('/applications/<int:application_id>/offer-letter', methods=['GET'])
 @role_required('STUDENT')
 def download_offer_letter(application_id):
+    # Streams the offer letter PDF the company attached to this application.
     student = current_student()
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
     if not application.offer_letter:
@@ -205,6 +220,7 @@ def download_offer_letter(application_id):
 @student_bp.route('/applications/<int:application_id>/resume', methods=['GET'])
 @role_required('STUDENT')
 def download_application_resume(application_id):
+    # Streams the resume snapshot taken when this application was submitted, which may differ from the student's current profile resume.
     student = current_student()
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
     if not application.snapshot_resume:
@@ -217,12 +233,14 @@ def download_application_resume(application_id):
 @student_bp.route('/profile', methods=['GET'])
 @role_required('STUDENT')
 def get_profile():
+    # Returns the current student's own profile.
     return jsonify(student_to_dict(current_student()))
 
 
 @student_bp.route('/profile', methods=['PATCH'])
 @role_required('STUDENT')
 def update_profile():
+    # Updates any subset of the student's profile fields, an optional resume upload, and an optional password change. Accepts JSON or multipart form data.
     student = current_student()
     if request.content_type and 'multipart/form-data' in request.content_type:
         data = request.form
@@ -265,6 +283,7 @@ def update_profile():
 @student_bp.route('/profile/resume', methods=['GET'])
 @role_required('STUDENT')
 def download_resume():
+    # Streams the student's current live resume as a PDF.
     student = current_student()
     if not student.resume:
         return error('No resume uploaded yet.', 404)
@@ -276,6 +295,8 @@ def download_resume():
 @student_bp.route('/applications/export', methods=['POST'])
 @role_required('STUDENT')
 def export_applications():
+    # Enqueues the CSV export as a background Celery task and returns its task id
+    # for the client to poll.
     student = current_student()
     task = task_client.send_task('tasks.export_applications_csv', args=[student.id])
     return jsonify({'task_id': task.id}), 202
@@ -284,6 +305,7 @@ def export_applications():
 @student_bp.route('/applications/export/<task_id>', methods=['GET'])
 @role_required('STUDENT')
 def export_status(task_id):
+    # Reports whether the export task has finished yet.
     result = AsyncResult(task_id, app=task_client)
     return jsonify({'state': result.state, 'ready': result.ready()})
 
@@ -291,6 +313,7 @@ def export_status(task_id):
 @student_bp.route('/applications/export/<task_id>/download', methods=['GET'])
 @role_required('STUDENT')
 def export_download(task_id):
+    # Streams the finished export's CSV content once the task result is ready.
     result = AsyncResult(task_id, app=task_client)
     if not result.ready():
         return error('Export is not ready yet.', 409)

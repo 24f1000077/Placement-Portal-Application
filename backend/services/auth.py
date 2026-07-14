@@ -9,11 +9,13 @@ from utils import error
 
 auth_bp = Blueprint('auth', __name__)
 
+# Basic email format check and 7-15 digit phone number check, used across registration/login.
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 PHONE_RE = re.compile(r'^\d{7,15}$')
 
 
 def issue_token(user):
+    # Builds a JWT carrying the user's role, display name, email, and role-specific profile id.
     claims = {'role': user.role.name, 'name': user.name, 'email': user.email}
     if user.role == Role.STUDENT:
         claims['profile_id'] = user.student_profile.id
@@ -24,12 +26,14 @@ def issue_token(user):
 
 @auth_bp.route('/branches', methods=['GET'])
 def branches():
+    # Public endpoint listing every branch, used to populate registration/filter dropdowns.
     rows = Branch.query.order_by(Branch.name).all()
     return jsonify([{'id': b.id, 'name': b.name} for b in rows])
 
 
 @auth_bp.route('/register/student', methods=['POST'])
 def register_student():
+    # Creates a new student account plus its StudentProfile.
     data = request.get_json(force=True) or {}
     name = (data.get('name') or '').strip()
     email = (data.get('email') or '').strip().lower()
@@ -39,6 +43,7 @@ def register_student():
     graduation_year = data.get('graduation_year')
     branch_id = data.get('branch_id')
 
+    # Validates required fields, formats, and value ranges before touching the database.
     if not name or not email or not password or not contact_number:
         return error('Name, email, password and contact number are required.')
     if not EMAIL_RE.match(email):
@@ -65,6 +70,7 @@ def register_student():
     if User.query.filter_by(email=email).first():
         return error('An account with this email already exists.')
 
+    # Creates the login row first so the profile can reference its id.
     user = User(name=name, role=Role.STUDENT, email=email, password=generate_password_hash(password))
     db.session.add(user)
     db.session.flush()
@@ -87,6 +93,7 @@ def register_student():
 
 @auth_bp.route('/register/company', methods=['POST'])
 def register_company():
+    # Creates a new company account plus its CompanyProfile, pending admin approval.
     data = request.get_json(force=True) or {}
     name = (data.get('name') or '').strip()
     email = (data.get('email') or '').strip().lower()
@@ -96,6 +103,7 @@ def register_company():
     industry = (data.get('industry') or '').strip()
     website = (data.get('website') or '').strip()
 
+    # Validates required fields and formats before touching the database.
     if not name or not email or not password or not company_name or not hr_contact:
         return error('Name, email, password, company name and HR contact number are required.')
     if not EMAIL_RE.match(email):
@@ -107,6 +115,7 @@ def register_company():
     if User.query.filter_by(email=email).first():
         return error('An account with this email already exists.')
 
+    # Creates the login row first so the profile can reference its id.
     user = User(name=name, role=Role.COMPANY, email=email, password=generate_password_hash(password))
     db.session.add(user)
     db.session.flush()
@@ -127,6 +136,7 @@ def register_company():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
+    # Verifies credentials, then blocks login for deactivated/unapproved/blacklisted accounts.
     data = request.get_json(force=True) or {}
     email = (data.get('email') or '').strip().lower()
     password = data.get('password') or ''
@@ -137,6 +147,7 @@ def login():
     if not user.is_active:
         return error('Your account has been deactivated. Please contact the placement cell.', 403)
 
+    # Companies must be approved (not pending/rejected/blacklisted) to log in.
     if user.role == Role.COMPANY:
         status = user.company_profile.approval_status
         if status == CompanyStatus.PENDING:
@@ -146,6 +157,7 @@ def login():
         if status == CompanyStatus.BLACKLISTED:
             return error('Your company account has been blacklisted.', 403)
 
+    # A blacklisted student cannot log in even if their account is otherwise active.
     if user.role == Role.STUDENT:
         if user.student_profile.approval_status == StudentStatus.BLACKLISTED:
             return error('Your student account has been blacklisted.', 403)
@@ -157,6 +169,7 @@ def login():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def me():
+    # Returns the current user's identity and role-specific profile, re-checking that the account is still active (catches accounts deactivated after the token was issued).
     claims = get_jwt()
     user = User.query.get(int(get_jwt_identity()))
     if not user:

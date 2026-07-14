@@ -1,14 +1,14 @@
 <template>
-  <!-- Renders the full-width company profile editing panel. -->
+  <!-- Renders the company profile panel: company details are read-only, only the password can be changed. -->
   <AppLayout>
     <h1 class="h4 mb-4">Company Profile</h1>
     <div class="pp-card p-4" style="max-width: 720px;">
-      <div v-if="saved" class="alert alert-success py-2">Profile updated.</div>
+      <div v-if="saved" class="alert alert-success py-2">Password updated.</div>
       <div v-if="formError" class="alert alert-danger py-2">{{ formError }}</div>
       <form v-if="form" class="row g-3" novalidate @submit.prevent="save">
         <div class="col-md-6">
           <label class="form-label">HR Contact Name</label>
-          <input v-model="form.name" class="form-control" required />
+          <input :value="form.name" class="form-control" disabled />
         </div>
         <div class="col-md-6">
           <label class="form-label">Email</label>
@@ -16,19 +16,22 @@
         </div>
         <div class="col-md-6">
           <label class="form-label">Company Name</label>
-          <input v-model="form.company_name" class="form-control" required />
+          <input :value="form.company_name" class="form-control" disabled />
         </div>
         <div class="col-md-6">
           <label class="form-label">HR Contact Number</label>
-          <input v-model="form.hr_contact" class="form-control" pattern="\d{7,15}" />
+          <input :value="form.hr_contact" class="form-control" disabled />
         </div>
         <div class="col-md-6">
           <label class="form-label">Industry</label>
-          <input v-model="form.industry" class="form-control" />
+          <input :value="form.industry" class="form-control" disabled />
         </div>
         <div class="col-12">
           <label class="form-label">Website</label>
-          <input v-model="form.website" type="url" class="form-control" placeholder="https://" />
+          <input :value="form.website" class="form-control" disabled />
+        </div>
+        <div class="col-12">
+          <p class="text-muted small mb-0">Company details are managed by the institute admin. Contact them to make changes.</p>
         </div>
 
         <div class="col-12">
@@ -46,7 +49,7 @@
         </div>
 
         <div class="col-12">
-          <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
+          <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save Password' }}</button>
         </div>
       </form>
     </div>
@@ -70,18 +73,16 @@ onMounted(async () => {
   form.value = data
 })
 
-// Saves the edited profile fields and an optional password change.
+// Submits the password change; company details are read-only here.
 async function save() {
   saving.value = true
   saved.value = false
   formError.value = ''
   try {
-    const payload = { ...form.value }
-    if (passwords.value.new_password) {
-      payload.current_password = passwords.value.current_password
-      payload.new_password = passwords.value.new_password
-    }
-    const { data } = await api.patch('/company/profile', payload)
+    const { data } = await api.patch('/company/profile', {
+      current_password: passwords.value.current_password,
+      new_password: passwords.value.new_password,
+    })
     form.value = data
     passwords.value = { current_password: '', new_password: '' }
     saved.value = true

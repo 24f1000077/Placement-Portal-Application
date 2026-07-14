@@ -18,13 +18,13 @@
       <table class="table pp-table mb-0 align-middle">
         <thead>
           <tr>
-            <th>Job Title</th><th>Target Year</th><th>Deadline</th><th>Min CGPA</th><th>Status</th><th class="text-end">Actions</th>
+            <th>Job Title</th><th>Target Years</th><th>Deadline</th><th>Min CGPA</th><th>Status</th><th class="text-end">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="d in drives" :key="d.id">
             <td>{{ d.job_title }}</td>
-            <td>{{ d.target_year }}</td>
+            <td>{{ targetYearRange(d) }}</td>
             <td>{{ formatDateTime(d.application_deadline) }}</td>
             <td>{{ d.cgpa }}</td>
             <td><StatusBadge :status="d.status" /></td>
@@ -35,6 +35,9 @@
                 <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
                 <button class="btn btn-sm btn-outline-secondary me-1" @click="askConfirm(d, 'close')">Close Applications</button>
                 <button class="btn btn-sm btn-outline-danger" @click="askConfirm(d, 'cancel')">Cancel</button>
+              </template>
+              <template v-else-if="d.status === 'APPLICATIONS_CLOSED'">
+                <button class="btn btn-sm btn-outline-secondary me-1" @click="openExtend(d)">Extend</button>
               </template>
             </td>
           </tr>
@@ -63,13 +66,20 @@
           <input v-model.number="form.cgpa" type="number" min="0" max="10" step="0.01" class="form-control" required :disabled="!editable" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Target Graduation Year</label>
-          <select v-model.number="form.target_year" class="form-select" required :disabled="!editable">
+          <label class="form-label">Min Graduation Year</label>
+          <select v-model.number="form.min_target_year" class="form-select" required :disabled="!editable">
             <option value="" disabled>Select</option>
             <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
           </select>
         </div>
         <div class="col-md-4">
+          <label class="form-label">Max Graduation Year</label>
+          <select v-model.number="form.max_target_year" class="form-select" required :disabled="!editable">
+            <option value="" disabled>Select</option>
+            <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
+          </select>
+        </div>
+        <div class="col-md-6">
           <label class="form-label">Offered Salary</label>
           <input v-model.number="form.salary" type="number" min="0" step="0.01" class="form-control" required :disabled="!editable" />
         </div>
@@ -137,6 +147,7 @@ const branchFilter = ref([])
 const skills = ref('')
 const minCgpa = ref('')
 
+// Branch names for the Branch filter dropdown.
 const branchOptions = computed(() => branches.value.map((b) => b.name))
 
 const formOpen = ref(false)
@@ -146,14 +157,22 @@ const saving = ref(false)
 const editable = ref(true)
 let editingId = null
 
+// Returns a blank create-drive form state.
 function blankForm() {
   return {
     job_title: '', job_description: '', location: '', job_type: '',
-    cgpa: null, target_year: '', salary: null, skills_required: '', benefits: '',
+    cgpa: null, min_target_year: '', max_target_year: '', salary: null, skills_required: '', benefits: '',
     application_deadline: '', branch_ids: [],
   }
 }
 const form = ref(blankForm())
+
+// Formats a drive's target-year range as a single value or "min–max".
+function targetYearRange(drive) {
+  return drive.min_target_year === drive.max_target_year
+    ? String(drive.min_target_year)
+    : `${drive.min_target_year}–${drive.max_target_year}`
+}
 
 const extendOpen = ref(false)
 const extendValue = ref('')

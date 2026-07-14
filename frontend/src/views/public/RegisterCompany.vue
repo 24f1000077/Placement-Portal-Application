@@ -8,7 +8,7 @@
       <div v-if="errorMessage" class="alert alert-danger py-2">{{ errorMessage }}</div>
       <div v-if="successMessage" class="alert alert-success py-2">{{ successMessage }}</div>
 
-      <form novalidate @submit.prevent="onSubmit">
+      <form @submit.prevent="onSubmit">
         <div class="row g-3">
           <div class="col-12">
             <label class="form-label">Company Name</label>
@@ -20,7 +20,16 @@
           </div>
           <div class="col-md-6">
             <label class="form-label">HR Contact Number</label>
-            <input v-model.trim="form.hr_contact" type="tel" class="form-control" pattern="\d{7,15}" title="Digits only, 7-15 characters" required />
+            <input
+              v-model="form.hr_contact"
+              @input="form.hr_contact = form.hr_contact.replace(/\D/g, '').slice(0, 15)"
+              type="tel"
+              inputmode="numeric"
+              class="form-control"
+              pattern="\d{7,15}"
+              title="Digits only, 7-15 characters"
+              required
+            />
           </div>
           <div class="col-md-6">
             <label class="form-label">Email address</label>
@@ -30,7 +39,7 @@
             <label class="form-label">Industry</label>
             <input v-model.trim="form.industry" type="text" class="form-control" placeholder="e.g. Software" />
           </div>
-          <div class="col-md-6">
+          <div class="col-12">
             <label class="form-label">Website</label>
             <input v-model.trim="form.website" type="url" class="form-control" placeholder="https://" />
           </div>
@@ -48,7 +57,7 @@
           {{ submitting ? 'Submitting…' : 'Register' }}
         </button>
         <div v-if="passwordMismatch" class="text-danger small mt-2">Passwords do not match.</div>
-        <p class="text-muted small mt-3 mb-0">Your account will be reviewed by the placement cell before you can sign in.</p>
+        <p class="text-muted small mt-3 mb-0 text-center">Your account will be reviewed by placement cell before you can sign in.</p>
       </form>
 
       <div class="text-center mt-4 small">
