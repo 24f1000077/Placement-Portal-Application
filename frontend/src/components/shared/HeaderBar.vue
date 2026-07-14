@@ -31,7 +31,7 @@ import { auth, clearSession } from '@/utils/auth'
 // Defines each role's header tabs in display order.
 const TAB_CONFIG = {
   ADMIN: [
-    { label: 'Overview', path: '/overview' },
+    { label: 'Overview', path: '/admin/overview' },
     { label: 'Companies', path: '/admin/companies' },
     { label: 'Placement Drives', path: '/admin/drives' },
     { label: 'Applications', path: '/admin/applications' },

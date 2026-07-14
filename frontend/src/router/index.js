@@ -11,7 +11,7 @@ const router = createRouter({
     { path: '/register/student', name: 'register-student', component: () => import('@/views/public/RegisterStudent.vue'), meta: { public: true } },
     { path: '/register/company', name: 'register-company', component: () => import('@/views/public/RegisterCompany.vue'), meta: { public: true } },
 
-    { path: '/overview', name: 'admin-overview', component: () => import('@/views/admin/AdminOverview.vue'), meta: { role: 'ADMIN' } },
+    { path: '/admin/overview', name: 'admin-overview', component: () => import('@/views/admin/AdminOverview.vue'), meta: { role: 'ADMIN' } },
     { path: '/admin/companies', name: 'admin-companies', component: () => import('@/views/admin/AdminCompanies.vue'), meta: { role: 'ADMIN' } },
     { path: '/admin/drives', name: 'admin-drives', component: () => import('@/views/admin/AdminDrives.vue'), meta: { role: 'ADMIN' } },
     { path: '/admin/applications', name: 'admin-applications', component: () => import('@/views/admin/AdminApplications.vue'), meta: { role: 'ADMIN' } },

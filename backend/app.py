@@ -28,6 +28,7 @@ def create_app():
     # Builds and configures the Flask app instance.
     app = Flask(__name__)
     app.config.from_object(config)
+    app.config["DEBUG"] = True
 
     # Binds the database, mail, JWT, and cache extensions to this app.
     db.init_app(app)

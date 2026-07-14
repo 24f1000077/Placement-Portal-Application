@@ -4,7 +4,7 @@
     <h1 class="h4 mb-4">Placement Drives</h1>
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-      <input v-model="search" type="search" class="form-control pp-search-pill" style="max-width: 280px;" placeholder="Search title or description…" />
+      <input v-model="search" type="search" class="form-control pp-search-pill" style="max-width: 280px;" placeholder="Search company, title or description…" />
       <MultiSelectDropdown label="Company" :options="companyOptions" v-model="companyIds" />
       <input v-model="skills" type="search" class="form-control" style="max-width: 180px;" placeholder="Skills…" />
       <div class="form-check ms-2">

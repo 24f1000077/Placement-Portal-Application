@@ -38,14 +38,14 @@
         <div class="row g-3 mb-4">
           <div class="col-md-3"><div class="text-muted small">Student</div><div class="fw-semibold">{{ detail.student_name }}</div></div>
           <div class="col-md-3"><div class="text-muted small">Branch</div><div class="fw-semibold">{{ detail.student_branch || '—' }}</div></div>
-          <div class="col-md-2"><div class="text-muted small">CGPA (at application)</div><div class="fw-semibold">{{ detail.student_cgpa }}</div></div>
+          <div class="col-md-2"><div class="text-muted small">CGPA</div><div class="fw-semibold">{{ detail.student_cgpa }}</div></div>
           <div class="col-md-4">
-            <div class="text-muted small">Resume (at application)</div>
+            <div class="text-muted small">Resume</div>
             <button v-if="detail.has_resume" class="btn btn-sm btn-outline-secondary mt-1" @click="downloadFile(`/company/applications/${detail.id}/resume`, studentFileName(detail.student_name, 'resume.pdf'))">Download Resume</button>
             <div v-else class="fw-semibold">Not uploaded</div>
           </div>
-          <div class="col-md-6"><div class="text-muted small">Skills (at application)</div><div class="fw-semibold">{{ detail.student_skills || '—' }}</div></div>
-          <div class="col-md-6"><div class="text-muted small">Experience (at application)</div><div class="fw-semibold">{{ detail.student_experience || '—' }}</div></div>
+          <div class="col-md-6"><div class="text-muted small">Skills</div><div class="fw-semibold">{{ detail.student_skills || '—' }}</div></div>
+          <div class="col-md-6"><div class="text-muted small">Experience</div><div class="fw-semibold">{{ detail.student_experience || '—' }}</div></div>
         </div>
 
         <PipelineGraph :status="detail.status" :interviews="detail.interviews" :has-placement="!!detail.placement" />

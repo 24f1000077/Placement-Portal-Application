@@ -33,7 +33,7 @@ export function clearSession() {
 
 // Maps a role name to its dashboard home route path.
 export function homeForRole(role) {
-  if (role === 'ADMIN') return '/overview'
+  if (role === 'ADMIN') return '/admin/overview'
   if (role === 'COMPANY') return '/company/overview'
   if (role === 'STUDENT') return '/student/drives'
   return '/login'

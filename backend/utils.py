@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import jsonify
+from flask import jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -28,7 +28,9 @@ def current_user_is_active():
 
 
 def error(message, status=400):
-    # Shorthand for a JSON error response.
+    # Shorthand for a JSON error response; also logs to the backend terminal
+    # so request failures (e.g. failed logins) are visible without a debugger.
+    current_app.logger.warning('[%s] %s', status, message)
     return jsonify(message=message), status
 
 
