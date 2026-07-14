@@ -1,4 +1,5 @@
 <template>
+  <!-- Renders a modal driven entirely by Vue state. -->
   <Teleport to="body">
     <div v-if="modelValue" class="modal d-block pp-modal-backdrop" tabindex="-1">
       <div class="modal-dialog modal-dialog-scrollable modal-dialog-centered" :class="fullWidth ? 'modal-xl' : 'modal-lg'">

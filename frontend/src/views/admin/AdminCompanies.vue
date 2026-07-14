@@ -1,7 +1,10 @@
 <template>
   <!-- Renders the admin companies management table with search, filters, and actions. -->
   <AppLayout>
-    <h1 class="h4 mb-4">Companies</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="h4 mb-0">Companies</h1>
+      <button class="btn btn-primary" @click="openCreate">Create Company</button>
+    </div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <input v-model="search" type="search" class="form-control" style="max-width: 280px;" placeholder="Search company name…" />
@@ -46,6 +49,60 @@
         </tbody>
       </table>
     </div>
+
+    <Modal v-model="createOpen" title="Create Company" full-width>
+      <form class="row g-3" @submit.prevent="submitCreate">
+        <div v-if="createError" class="col-12"><div class="alert alert-danger py-2">{{ createError }}</div></div>
+        <div class="col-12">
+          <label class="form-label">Company Name</label>
+          <input v-model.trim="createForm.company_name" type="text" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">HR Contact Name</label>
+          <input v-model.trim="createForm.name" type="text" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">HR Contact Number</label>
+          <input
+            v-model="createForm.hr_contact"
+            @input="createForm.hr_contact = createForm.hr_contact.replace(/\D/g, '').slice(0, 15)"
+            type="tel"
+            inputmode="numeric"
+            class="form-control"
+            pattern="\d{7,15}"
+            title="Digits only, 7-15 characters"
+            required
+          />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email address</label>
+          <input v-model.trim="createForm.email" type="email" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Industry</label>
+          <input v-model.trim="createForm.industry" type="text" class="form-control" placeholder="e.g. Software" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Website</label>
+          <input v-model.trim="createForm.website" type="url" class="form-control" placeholder="https://" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Password</label>
+          <input v-model="createForm.password" type="password" class="form-control" required minlength="6" autocomplete="new-password" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Confirm Password</label>
+          <input v-model="createConfirmPassword" type="password" class="form-control" required minlength="6" autocomplete="new-password" />
+        </div>
+        <div class="col-12 text-muted small">This company is created as Approved immediately, with no pending review step.</div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary" :disabled="creating || createPasswordMismatch">
+            {{ creating ? 'Creating…' : 'Create Company' }}
+          </button>
+          <div v-if="createPasswordMismatch" class="text-danger small mt-2">Passwords do not match.</div>
+        </div>
+      </form>
+    </Modal>
 
     <Modal v-model="viewOpen" title="Company Details" full-width>
       <form v-if="editing" class="row g-3" @submit.prevent="saveEdit">
@@ -93,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
@@ -115,6 +172,17 @@ const statuses = ref([])
 const viewOpen = ref(false)
 const editing = ref(null)
 const saving = ref(false)
+
+const createOpen = ref(false)
+const creating = ref(false)
+const createError = ref('')
+const createConfirmPassword = ref('')
+function blankCreateForm() {
+  return { name: '', email: '', password: '', company_name: '', hr_contact: '', industry: '', website: '' }
+}
+const createForm = ref(blankCreateForm())
+// Flags a client-side mismatch between the two password fields.
+const createPasswordMismatch = computed(() => createConfirmPassword.value.length > 0 && createConfirmPassword.value !== createForm.value.password)
 
 const confirmOpen = ref(false)
 const confirmTitle = ref('')
@@ -143,6 +211,29 @@ function viewDrives(company) {
 // Navigates to Applications, pre-filtered to this company.
 function viewApplications(company) {
   router.push({ path: '/admin/applications', query: { company_id: company.id } })
+}
+
+// Opens the create-company modal in a blank state.
+function openCreate() {
+  createForm.value = blankCreateForm()
+  createConfirmPassword.value = ''
+  createError.value = ''
+  createOpen.value = true
+}
+
+// Submits the new company; created directly as Approved.
+async function submitCreate() {
+  creating.value = true
+  createError.value = ''
+  try {
+    await api.post('/admin/companies', createForm.value)
+    createOpen.value = false
+    await load()
+  } catch (err) {
+    createError.value = err.response?.data?.message || 'Unable to create the company.'
+  } finally {
+    creating.value = false
+  }
 }
 
 // Opens the full-width detail/edit modal for a company.

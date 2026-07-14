@@ -1,7 +1,10 @@
 <template>
   <!-- Renders the admin placement drives management table with search, filters, and lifecycle actions. -->
   <AppLayout>
-    <h1 class="h4 mb-4">Placement Drives</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="h4 mb-0">Placement Drives</h1>
+      <button class="btn btn-primary" @click="openCreate">Create Placement Drive</button>
+    </div>
 
     <div v-if="companyFilterLabel" class="alert alert-info py-2 d-flex align-items-center justify-content-between mb-3">
       <span>Showing drives for <strong>{{ companyFilterLabel }}</strong></span>
@@ -62,6 +65,83 @@
         </tbody>
       </table>
     </div>
+
+    <Modal v-model="createOpen" title="Create Placement Drive" full-width>
+      <form class="row g-3" @submit.prevent="submitCreate">
+        <div v-if="createError" class="col-12"><div class="alert alert-danger py-2">{{ createError }}</div></div>
+        <div class="col-md-6">
+          <label class="form-label">Company</label>
+          <select v-model.number="createForm.company_id" class="form-select" required>
+            <option value="" disabled>Select a company</option>
+            <option v-for="c in companyOptions" :key="c.value" :value="c.value">{{ c.label }}</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Job Title</label>
+          <input v-model="createForm.job_title" class="form-control" required />
+        </div>
+        <div class="col-md-12">
+          <label class="form-label">Location</label>
+          <input v-model="createForm.location" class="form-control" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Job Description</label>
+          <textarea v-model="createForm.job_description" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Minimum CGPA</label>
+          <input v-model.number="createForm.cgpa" type="number" min="0" max="10" step="0.01" class="form-control" required />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Min Graduation Year</label>
+          <select v-model.number="createForm.min_target_year" class="form-select">
+            <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Max Graduation Year</label>
+          <select v-model.number="createForm.max_target_year" class="form-select">
+            <option v-for="y in TARGET_YEARS" :key="y" :value="y">{{ y }}</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Offered Salary</label>
+          <input v-model.number="createForm.salary" type="number" min="0" step="0.01" class="form-control" required />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Skills Required</label>
+          <input v-model="createForm.skills_required" class="form-control" placeholder="e.g. Python, SQL" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Experience Required</label>
+          <input v-model="createForm.experience_required" class="form-control" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Application Deadline</label>
+          <input v-model="createForm.application_deadline" type="datetime-local" class="form-control" :min="minDateTimeLocal" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Job Type</label>
+          <input v-model="createForm.job_type" class="form-control" placeholder="e.g. Full-time" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Eligible Branches</label>
+          <BranchTokenInput v-model="createForm.branch_ids" :options="branches" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Benefits</label>
+          <textarea v-model="createForm.benefits" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Notes</label>
+          <textarea v-model="createForm.notes" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12 text-muted small">This drive is created as Approved immediately, with no pending review step.</div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary" :disabled="creating">{{ creating ? 'Creating…' : 'Create Placement Drive' }}</button>
+        </div>
+      </form>
+    </Modal>
 
     <Modal v-model="viewOpen" title="Placement Drive Details" full-width>
       <form v-if="editing" class="row g-3" @submit.prevent="saveEdit">
@@ -200,6 +280,19 @@ const viewOpen = ref(false)
 const editing = ref(null)
 const saving = ref(false)
 
+const createOpen = ref(false)
+const creating = ref(false)
+const createError = ref('')
+function blankCreateForm() {
+  return {
+    company_id: '', job_title: '', location: '', job_description: '',
+    cgpa: null, min_target_year: TARGET_YEARS[0], max_target_year: TARGET_YEARS[0],
+    salary: null, skills_required: '', experience_required: '', application_deadline: '',
+    job_type: '', branch_ids: [], benefits: '', notes: '',
+  }
+}
+const createForm = ref(blankCreateForm())
+
 const extendOpen = ref(false)
 const extendValue = ref('')
 let extendTarget = null
@@ -250,6 +343,28 @@ onMounted(async () => {
 // Navigates to Applications, pre-filtered to this drive.
 function viewApplications(drive) {
   router.push({ path: '/admin/applications', query: { drive_id: drive.id } })
+}
+
+// Opens the create-drive modal in a blank state.
+function openCreate() {
+  createForm.value = blankCreateForm()
+  createError.value = ''
+  createOpen.value = true
+}
+
+// Submits the new placement drive; created directly as Approved.
+async function submitCreate() {
+  creating.value = true
+  createError.value = ''
+  try {
+    await api.post('/admin/drives', createForm.value)
+    createOpen.value = false
+    await load()
+  } catch (err) {
+    createError.value = err.response?.data?.message || 'Unable to create the placement drive.'
+  } finally {
+    creating.value = false
+  }
 }
 
 // Opens the full-width detail/edit modal for a drive.

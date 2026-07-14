@@ -66,10 +66,11 @@ def make_student(name, email, branch_name, cgpa, grad_year, status, skills):
     return profile
 
 
-def make_drive(company, job_title, status, cgpa, target_year, branch_names, days_from_now, skills, salary):
-    # Skips creation if this company already has a drive with the same title.
+def make_drive(company, job_title, status, cgpa, target_year, branch_names, days_from_now, skills, salary, created_at=None):
     existing = PlacementDrive.query.filter_by(company_id=company.id, job_title=job_title).first()
     if existing:
+        if created_at:
+            existing.created_at = created_at
         return existing
     branches = Branch.query.filter(Branch.name.in_(branch_names)).all()
     drive = PlacementDrive(
@@ -78,23 +79,25 @@ def make_drive(company, job_title, status, cgpa, target_year, branch_names, days
         application_deadline=datetime.now(timezone.utc) + timedelta(days=days_from_now),
         cgpa=cgpa, min_target_year=target_year, max_target_year=target_year, skills_required=skills, salary=salary,
         status=status, allowed_branches=branches,
+        created_at=created_at,
     )
     db.session.add(drive)
     db.session.flush()
     return drive
 
 
-def make_application(student, drive, status, offered_salary=None, joining_date=None):
-    # Skips creation if this student has already applied to this drive.
+def make_application(student, drive, status, offered_salary=None, joining_date=None, created_at=None):
     existing = Application.query.filter_by(student_id=student.id, drive_id=drive.id).first()
     if existing:
+        if created_at:
+            existing.created_at = created_at
         return existing
-    # Copies the student's current profile fields onto the application snapshot columns.
     application = Application(
         student_id=student.id, drive_id=drive.id, status=status,
         offered_salary=offered_salary, offered_joining_date=joining_date,
         snapshot_cgpa=student.cgpa, snapshot_skills=student.skills,
         snapshot_experience=student.experience, snapshot_resume=student.resume,
+        created_at=created_at,
     )
     db.session.add(application)
     db.session.flush()
@@ -140,6 +143,11 @@ def run():
         d_backend = make_drive(acme, 'Backend Developer', PlacementDriveStatus.REJECTED, 7.0, 2027, ['Computer Science'], 20, 'Node.js', 1000000)
         d_pm = make_drive(beta, 'Product Manager', PlacementDriveStatus.APPROVED, 8.0, 2027, ['Computer Science', 'Information Technology', 'Electronics & Communication'], 40, 'Product Strategy', 1500000)
         d_qa = make_drive(beta, 'QA Engineer', PlacementDriveStatus.APPROVED, 6.0, 2028, ['Computer Science', 'Electrical Engineering'], 35, 'Selenium, Testing', 800000)
+        # Drive to test send_daily_reminders (deadline in the next 48 hours)
+        d_reminder = make_drive(
+            acme, 'QA Automation Engineer', PlacementDriveStatus.APPROVED, 6.5, 2027,
+            ['Computer Science', 'Information Technology'], 1.5, 'Python, Selenium', 950000
+        )
         db.session.commit()
 
         aarav, diya, kabir, isha, vivaan, ananya, reyansh, myra, arjun, sara = students
@@ -165,11 +173,25 @@ def run():
                 status=InterviewStatus.SCHEDULED,
             ))
 
-        # Creates the placement record for the PLACED-stage application.
+        # June 2026 data to test the generate_monthly_report Celery task
+        d_june_swe = make_drive(
+            acme, 'June Systems Engineer', PlacementDriveStatus.APPROVED, 7.0, 2027,
+            ['Computer Science', 'Information Technology'], 30, 'C, Unix, SQL', 1300000,
+            created_at=datetime(2026, 6, 10, 10, 0, 0)
+        )
+        app_june1 = make_application(aarav, d_june_swe, ApplicationStatus.PLACED, offered_salary=1300000, joining_date=date(2026, 8, 1), created_at=datetime(2026, 6, 12, 14, 0, 0))
+        app_june2 = make_application(diya, d_june_swe, ApplicationStatus.REJECTED, created_at=datetime(2026, 6, 13, 11, 0, 0))
+
         if not app_placed.placement:
             db.session.add(Placement(
                 student_id=ananya.id, company_id=beta.id, drive_id=d_pm.id, application_id=app_placed.id,
                 position=d_pm.job_title, salary_offered=app_placed.offered_salary, joining_date=app_placed.offered_joining_date,
+            ))
+        if not app_june1.placement:
+            db.session.add(Placement(
+                student_id=aarav.id, company_id=acme.id, drive_id=d_june_swe.id, application_id=app_june1.id,
+                position=d_june_swe.job_title, salary_offered=app_june1.offered_salary, joining_date=app_june1.offered_joining_date,
+                created_at=datetime(2026, 6, 25, 16, 0, 0)
             ))
         db.session.commit()
         print('Seed data created successfully.')

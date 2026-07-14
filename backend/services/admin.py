@@ -2,6 +2,7 @@ import re
 import io
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, send_file
+from werkzeug.security import generate_password_hash
 
 from models import (
     db, User, Role, Branch,
@@ -14,10 +15,13 @@ from models import (
 from serializers import company_to_dict, student_to_dict, drive_to_dict, application_to_dict, interview_to_dict
 from utils import role_required, error
 from app import cache
+# Reuses the company blueprint's drive-payload validation so admin-created drives are held to the exact same rules as company-created ones.
+from services.company import validate_drive_payload
 
 admin_bp = Blueprint('admin', __name__)
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+PHONE_RE = re.compile(r'^\d{7,15}$')
 # Application stages that are still "in play" and eligible for auto-rejection/withdrawal when their drive or company is cancelled/blacklisted.
 ACTIVE_APPLICATION_STATUSES = [ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER]
 
@@ -55,6 +59,48 @@ def list_companies():
         q = q.filter(CompanyProfile.approval_status.in_([CompanyStatus[s] for s in statuses if s in CompanyStatus.__members__]))
     companies = q.order_by(CompanyProfile.id.desc()).all()
     return jsonify({'count': len(companies), 'results': [company_to_dict(c) for c in companies]})
+
+
+@admin_bp.route('/companies', methods=['POST'])
+@role_required('ADMIN')
+def create_company():
+    # Creates a company account directly as APPROVED (admin already vetted it, so there's no pending-review step to skip). Field validation mirrors public registration.
+    data = request.get_json(force=True) or {}
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    company_name = (data.get('company_name') or '').strip()
+    hr_contact = (data.get('hr_contact') or '').strip()
+    industry = (data.get('industry') or '').strip()
+    website = (data.get('website') or '').strip()
+
+    if not name or not email or not password or not company_name or not hr_contact:
+        return error('Name, email, password, company name and HR contact number are required.')
+    if not EMAIL_RE.match(email):
+        return error('Please provide a valid email address.')
+    if len(password) < 6:
+        return error('Password must be at least 6 characters long.')
+    if not PHONE_RE.match(hr_contact):
+        return error('Please provide a valid HR contact number.')
+    if User.query.filter_by(email=email).first():
+        return error('An account with this email already exists.')
+
+    user = User(name=name, role=Role.COMPANY, email=email, password=generate_password_hash(password), is_active=True)
+    db.session.add(user)
+    db.session.flush()
+
+    profile = CompanyProfile(
+        user_id=user.id,
+        company_name=company_name,
+        hr_contact=hr_contact,
+        industry=industry or None,
+        website=website or None,
+        approval_status=CompanyStatus.APPROVED,
+    )
+    db.session.add(profile)
+    db.session.commit()
+    cache.clear()
+    return jsonify(company_to_dict(profile)), 201
 
 
 @admin_bp.route('/companies/<int:company_id>', methods=['PATCH'])
@@ -186,6 +232,44 @@ def list_drives():
         q = q.filter(PlacementDrive.application_deadline < datetime.fromisoformat(deadline_to) + timedelta(days=1))
     drives = q.order_by(PlacementDrive.created_at.desc()).all()
     return jsonify({'count': len(drives), 'results': [drive_to_dict(d) for d in drives]})
+
+
+@admin_bp.route('/drives', methods=['POST'])
+@role_required('ADMIN')
+def create_drive():
+    # Creates a placement drive directly as APPROVED, linked to the company_id the admin picks. Uses the same field validation as a company creating its own drive.
+    data = request.get_json(force=True) or {}
+    company = CompanyProfile.query.get(data.get('company_id'))
+    if not company:
+        return error('Please select a valid company for this drive.')
+
+    errors = validate_drive_payload(data)
+    if errors:
+        return error(' '.join(errors))
+
+    branches = Branch.query.filter(Branch.id.in_(data['branch_ids'])).all()
+    drive = PlacementDrive(
+        company_id=company.id,
+        job_title=data['job_title'].strip(),
+        job_description=data.get('job_description'),
+        location=data.get('location'),
+        job_type=data.get('job_type'),
+        application_deadline=datetime.fromisoformat(data['application_deadline']),
+        cgpa=float(data['cgpa']),
+        min_target_year=int(data['min_target_year']),
+        max_target_year=int(data['max_target_year']),
+        skills_required=data.get('skills_required'),
+        experience_required=data.get('experience_required'),
+        salary=float(data['salary']),
+        benefits=data.get('benefits'),
+        notes=data.get('notes'),
+        status=PlacementDriveStatus.APPROVED,
+        allowed_branches=branches,
+    )
+    db.session.add(drive)
+    db.session.commit()
+    cache.clear()
+    return jsonify(drive_to_dict(drive)), 201
 
 
 @admin_bp.route('/drives/<int:drive_id>', methods=['PATCH'])
