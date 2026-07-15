@@ -351,7 +351,13 @@ PMS/
 7. **Problem:** Renaming a CSV export's filename in the backend Celery task had no visible effect — the browser kept saving it under the old name. **Resolution:** The actual download filename wasn't coming from the backend at all. The frontend fetches the file as a raw blob (via axios) and creates its own local object URL with a hardcoded `download` attribute on a synthetic link — this discards any filename the server suggested. Had to trace the full path (Celery task → Flask `send_file` → axios blob response → frontend download helper) and fix the filename at the actual point of control: the frontend call site.
     
 8. **Problem:** Several list views had a "Newest first / Oldest first" sort control that was quietly sorting by different things — some by record-creation time, interview lists by _scheduled_ time, and two admin lists had no date field of their own to sort by at all (they silently borrowed the linked user account's registration date). **Resolution:** Audited every list against its actual schema, dropped the sort control entirely on views with no genuine date field, and relabeled the rest to say exactly what they sort by (e.g. "Latest scheduled first" instead of an ambiguous "Newest first").
- 
+    
+9. **Problem:** A relative SQLite path (`sqlite:///placementpro.db`) was assumed to resolve relative to whatever directory the process was started from, raising concern that changing it would silently orphan the existing database file. **Resolution:** Verified directly rather than assuming — Flask-SQLAlchemy resolves relative SQLite paths against the Flask app's `instance_path` (an app-relative `instance/` folder), independent of the process's current working directory, so the existing data stayed exactly where expected.
+    
+10. **Problem:** Scripted browser logins during testing intermittently landed back on the login page even though the server had returned a successful `200` login response. **Resolution:** The token-storing logic runs asynchronously after the login POST resolves; navigating to the next page immediately after clicking "submit" sometimes raced ahead of that write, discarding the session before it was persisted. Fixed by waiting for the login response to actually complete before navigating in any automated test flow.
+    
+11. **Challenge:** The problem statement did not specify whether Admin, as the institute's super user, should be able to directly create student, company, and placement drive records, or only approve/reject submissions made by others. **Resolution:** Coordinated with the course TA for clarification. Confirmed this was acceptable as an additional feature, and implemented direct "Create Company" and "Create Placement Drive" actions for admins, with new records saved as already approved.
+
 
 ---
 
