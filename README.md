@@ -345,8 +345,9 @@ PMS/
 4. **Problem:** Registration forms had `required`, `pattern`, and range attributes on every field, but you could submit completely empty forms without any client-side warning. **Resolution:** The `<form novalidate>` attribute disables the browser's entire constraint-validation engine — so those attributes were pure decoration. Only the backend was ever actually checking them, after a full round-trip. Removed `novalidate` so native validation runs live, and added explicit input filtering (stripping non-digits) on phone number fields, since native validation alone can't prevent bad characters from being typed.
     
 5. **Problem:** After adding an admin action to blacklist a company, a company that was already logged in kept full dashboard access until their token naturally expired (up to 8 hours later). **Resolution:** JWTs are stateless and were never re-checked against the database after login. Added a live `is_active` check inside the shared `role_required` decorator so every authenticated request — not just login — re-validates the account hasn't been deactivated since the token was issued.
-
-
+    
+6. **Problem:** A company reviewing an applicant's CGPA/skills/resume would sometimes see different data days later for the same application, because the student had since edited their profile. **Resolution:** Application detail views were reading the student's _live_ profile instead of what was true at application time. Added a point-in-time snapshot (CGPA, skills, experience, resume) copied onto the `Application` row itself at the moment a student applies, and switched every view/download to read from that snapshot instead of the live profile.
+ 
 ---
 
 ## Troubleshooting
