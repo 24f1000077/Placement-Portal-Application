@@ -357,7 +357,10 @@ PMS/
 10. **Problem:** Scripted browser logins during testing intermittently landed back on the login page even though the server had returned a successful `200` login response. **Resolution:** The token-storing logic runs asynchronously after the login POST resolves; navigating to the next page immediately after clicking "submit" sometimes raced ahead of that write, discarding the session before it was persisted. Fixed by waiting for the login response to actually complete before navigating in any automated test flow.
     
 11. **Challenge:** The problem statement did not specify whether Admin, as the institute's super user, should be able to directly create student, company, and placement drive records, or only approve/reject submissions made by others. **Resolution:** Coordinated with the course TA for clarification. Confirmed this was acceptable as an additional feature, and implemented direct "Create Company" and "Create Placement Drive" actions for admins, with new records saved as already approved.
-
+    
+12. **Challenge:** The intended scope of a student's "past placement history" was ambiguous — whether it should include only applications that ended in a placement, offer, or rejection, or every application the student ever submitted. **Resolution:** Coordinated with the course TA for clarification. Confirmed the scope should be all of a student's applications, regardless of outcome. The student Applications view lists every application alongside its current pipeline status.
+    
+13. **Challenge:** A placement drive originally targeted a single graduation year, which incorrectly excluded eligible students graduating in adjacent years from applying. **Resolution:** Replaced the single `target_year` field with a `min_target_year`/`max_target_year` range on each drive, so a drive can target a span of graduating batches, or a single year when both bounds match.
 
 ---
 
