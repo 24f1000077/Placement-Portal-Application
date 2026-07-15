@@ -57,6 +57,8 @@
           <div class="alert alert-secondary py-2 mb-0">{{ detail.feedback }}</div>
         </div>
 
+        <div v-if="actionError" class="alert alert-danger py-2 mt-4 mb-0">{{ actionError }}</div>
+
         <div class="d-flex flex-wrap gap-2 mt-4">
           <button v-if="detail.interviews.length" class="btn btn-sm btn-outline-secondary" @click="interviewOpen = true">View Interview</button>
           <button v-if="['OFFER', 'PLACED'].includes(detail.status)" class="btn btn-sm btn-outline-secondary" @click="offerOpen = true">View Offer</button>
@@ -105,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import AppLayout from '@/components/shared/AppLayout.vue'
 import Modal from '@/components/shared/Modal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -117,6 +119,7 @@ import { debounce } from '@/utils/debounce'
 import { formatDate, formatDateTime } from '@/utils/date'
 import { downloadFile, studentFileName } from '@/utils/download'
 import { auth } from '@/utils/auth'
+import { subscribeToApplicationUpdates } from '@/utils/studentEvents'
 
 const STATUS_OPTIONS = ['APPLIED', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'PLACED', 'REJECTED', 'WITHDRAWN']
 
@@ -131,6 +134,7 @@ const detail = ref(null)
 const withdrawOpen = ref(false)
 const exporting = ref(false)
 const exportMessage = ref('')
+const actionError = ref('')
 
 // Fetches the applications list for the active search/filter state, newest first.
 async function load() {
@@ -143,10 +147,28 @@ async function load() {
 const debouncedLoad = debounce(load, 300)
 watch([search, statuses], debouncedLoad, { deep: true })
 
-onMounted(load)
+// Reacts to a company/admin-side status change pushed over SSE: always refreshes the
+// list, and also refreshes the open detail panel in place if it's the affected application.
+async function handleRealtimeUpdate(applicationId) {
+  await load()
+  if (detail.value && detail.value.id === applicationId) {
+    const { data } = await api.get(`/student/applications/${applicationId}`)
+    detail.value = data
+  }
+}
+
+let unsubscribe = () => {}
+
+onMounted(() => {
+  load()
+  unsubscribe = subscribeToApplicationUpdates(handleRealtimeUpdate)
+})
+
+onUnmounted(() => unsubscribe())
 
 // Opens the detail/pipeline panel for an application.
 async function openView(application) {
+  actionError.value = ''
   const { data } = await api.get(`/student/applications/${application.id}`)
   detail.value = data
   viewOpen.value = true
@@ -154,16 +176,26 @@ async function openView(application) {
 
 // Accepts the current offer, finalizing the placement.
 async function acceptOffer() {
-  const { data } = await api.post(`/student/applications/${detail.value.id}/accept-offer`)
-  detail.value = data
-  await load()
+  actionError.value = ''
+  try {
+    const { data } = await api.post(`/student/applications/${detail.value.id}/accept-offer`)
+    detail.value = data
+    await load()
+  } catch (err) {
+    actionError.value = err.response?.data?.message || 'Could not accept the offer. Please try again.'
+  }
 }
 
 // Withdraws the active application.
 async function withdraw() {
-  const { data } = await api.post(`/student/applications/${detail.value.id}/withdraw`)
-  detail.value = data
-  await load()
+  actionError.value = ''
+  try {
+    const { data } = await api.post(`/student/applications/${detail.value.id}/withdraw`)
+    detail.value = data
+    await load()
+  } catch (err) {
+    actionError.value = err.response?.data?.message || 'Could not withdraw the application. Please try again.'
+  }
 }
 
 // Triggers the async CSV export and polls until it's ready, then downloads it.

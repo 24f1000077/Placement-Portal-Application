@@ -1,7 +1,8 @@
 import re
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, current_app
 import io
+import redis
 
 from celery import Celery
 from celery.result import AsyncResult
@@ -189,6 +190,8 @@ def accept_offer(application_id):
     application = Application.query.filter_by(id=application_id, student_id=student.id).first_or_404()
     if application.status != ApplicationStatus.OFFER:
         return error('Only applications in the Offer stage can be accepted.')
+    if application.placement:
+        return error('This application already has a placement record.', 409)
 
     placement = Placement(
         student_id=student.id,
@@ -317,6 +320,9 @@ def export_download(task_id):
     result = AsyncResult(task_id, app=task_client)
     if not result.ready():
         return error('Export is not ready yet.', 409)
+    if not result.successful():
+        current_app.logger.error('Export task %s failed: %s', task_id, result.result)
+        return error('Export failed. Please try again.', 500)
     payload = result.result
     return send_file(
         io.BytesIO(payload['csv'].encode('utf-8')),
@@ -324,3 +330,34 @@ def export_download(task_id):
         as_attachment=True,
         download_name=payload['filename'],
     )
+
+
+# ---- Live updates ----
+
+@student_bp.route('/events', methods=['GET'])
+@role_required('STUDENT', locations=['query_string'])
+def student_events():
+    # Streams application/interview status changes to the logged-in student via SSE, so
+    # an open dashboard tab updates without a manual refresh. Accepts the JWT via ?token=
+    # since EventSource can't set an Authorization header.
+    user_id = get_jwt_identity()
+
+    def stream():
+        client = redis.Redis.from_url(current_app.config['CACHE_REDIS_URL'])
+        pubsub = client.pubsub()
+        pubsub.subscribe(f'student-updates:{user_id}')
+        try:
+            while True:
+                message = pubsub.get_message(timeout=20)
+                if message and message['type'] == 'message':
+                    data = message['data']
+                    if isinstance(data, bytes):
+                        data = data.decode()
+                    yield f'data: {data}\n\n'
+                else:
+                    # Keeps the connection alive through idle periods; ignored by EventSource.
+                    yield ': keep-alive\n\n'
+        finally:
+            pubsub.close()
+
+    return Response(stream_with_context(stream()), mimetype='text/event-stream')

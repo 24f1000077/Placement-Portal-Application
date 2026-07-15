@@ -12,6 +12,9 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'placementpro-dev-secret')
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'placementpro-dev-jwt-secret')
 # Access tokens expire after 8 hours.
 JWT_ACCESS_TOKEN_EXPIRES = 60 * 60 * 8
+# Query-string param name for routes that accept the JWT via `?token=` (e.g. the SSE
+# stream, since EventSource can't set an Authorization header). Default is 'jwt'.
+JWT_QUERY_STRING_NAME = 'token'
 
 # Database connection string; defaults to a local SQLite file.
 SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///placementpro.db')

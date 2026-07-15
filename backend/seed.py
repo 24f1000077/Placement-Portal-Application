@@ -18,6 +18,21 @@ from models import (
 
 app = create_app()
 
+# A minimal, valid one-page PDF so seeded offer letters are actually downloadable/openable.
+SAMPLE_OFFER_LETTER_PDF = b"""%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 150]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj
+4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+5 0 obj<</Length 90>>
+stream
+BT /F1 14 Tf 20 100 Td (Offer Letter - Aarav Shah) Tj 0 -25 Td (Systems Engineer, Acme Corp) Tj ET
+endstream
+endobj
+trailer<</Size 6/Root 1 0 R>>
+%%EOF
+"""
+
 
 def make_user(name, email, password, role):
     # Returns the existing user for this email if one exists, otherwise creates it.
@@ -86,15 +101,17 @@ def make_drive(company, job_title, status, cgpa, target_year, branch_names, days
     return drive
 
 
-def make_application(student, drive, status, offered_salary=None, joining_date=None, created_at=None):
+def make_application(student, drive, status, offered_salary=None, joining_date=None, offer_letter=None, created_at=None):
     existing = Application.query.filter_by(student_id=student.id, drive_id=drive.id).first()
     if existing:
         if created_at:
             existing.created_at = created_at
+        if offer_letter and not existing.offer_letter:
+            existing.offer_letter = offer_letter
         return existing
     application = Application(
         student_id=student.id, drive_id=drive.id, status=status,
-        offered_salary=offered_salary, offered_joining_date=joining_date,
+        offered_salary=offered_salary, offered_joining_date=joining_date, offer_letter=offer_letter,
         snapshot_cgpa=student.cgpa, snapshot_skills=student.skills,
         snapshot_experience=student.experience, snapshot_resume=student.resume,
         created_at=created_at,
@@ -180,7 +197,10 @@ def run():
             ['Computer Science', 'Information Technology'], 30, 'C, Unix, SQL', 1300000,
             created_at=datetime(2026, 6, 10, 10, 0, 0)
         )
-        app_june1 = make_application(aarav, d_june_swe, ApplicationStatus.PLACED, offered_salary=1300000, joining_date=date(2026, 8, 1), created_at=datetime(2026, 6, 12, 14, 0, 0))
+        app_june1 = make_application(
+            aarav, d_june_swe, ApplicationStatus.PLACED, offered_salary=1300000, joining_date=date(2026, 8, 1),
+            offer_letter=SAMPLE_OFFER_LETTER_PDF, created_at=datetime(2026, 6, 12, 14, 0, 0),
+        )
         app_june2 = make_application(diya, d_june_swe, ApplicationStatus.REJECTED, created_at=datetime(2026, 6, 13, 11, 0, 0))
 
         if not app_placed.placement:

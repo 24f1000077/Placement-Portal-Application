@@ -12,6 +12,7 @@ from models import (
 )
 from serializers import company_to_dict, drive_to_dict, application_to_dict, interview_to_dict
 from utils import role_required, error, apply_password_change
+from realtime import notify_application_update
 from app import cache
 
 company_bp = Blueprint('company', __name__)
@@ -237,12 +238,16 @@ def cancel_drive(drive_id):
     if drive.status != PlacementDriveStatus.APPROVED:
         return error('Only approved drives can be cancelled.')
     drive.status = PlacementDriveStatus.CANCELLED
+    affected = []
     for application in drive.applications:
         if application.status in (ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER):
             application.status = ApplicationStatus.REJECTED
             application.feedback = 'Automatically rejected: the placement drive was cancelled.'
+            affected.append(application)
     db.session.commit()
     cache.clear()
+    for application in affected:
+        notify_application_update(application)
     return jsonify(drive_to_dict(drive))
 
 
@@ -301,6 +306,7 @@ def update_application_status(application_id):
     else:
         return error('Invalid pipeline transition.')
     db.session.commit()
+    notify_application_update(application)
     return jsonify(application_to_dict(application))
 
 
@@ -333,6 +339,7 @@ def schedule_interview(application_id):
     # Scheduling the first interview is how a shortlisted candidate moves into the Interview stage.
     application.status = ApplicationStatus.INTERVIEW
     db.session.commit()
+    notify_application_update(application)
     return jsonify(interview_to_dict(interview)), 201
 
 
@@ -377,6 +384,7 @@ def make_offer(application_id):
         application.offer_letter = offer_letter_b64
     application.status = ApplicationStatus.OFFER
     db.session.commit()
+    notify_application_update(application)
     return jsonify(application_to_dict(application))
 
 

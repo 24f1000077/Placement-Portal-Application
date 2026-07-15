@@ -14,6 +14,7 @@ from models import (
 )
 from serializers import company_to_dict, student_to_dict, drive_to_dict, application_to_dict, interview_to_dict
 from utils import role_required, error
+from realtime import notify_application_update
 from app import cache
 # Reuses the company blueprint's drive-payload validation so admin-created drives are held to the exact same rules as company-created ones.
 from services.company import validate_drive_payload
@@ -171,6 +172,7 @@ def blacklist_company(company_id):
         return error('Only approved companies can be blacklisted.')
     company.approval_status = CompanyStatus.BLACKLISTED
     company.user.is_active = False
+    affected = []
     for drive in company.drives:
         if drive.status not in (PlacementDriveStatus.CANCELLED, PlacementDriveStatus.APPLICATIONS_CLOSED):
             drive.status = PlacementDriveStatus.CANCELLED
@@ -178,8 +180,11 @@ def blacklist_company(company_id):
             if application.status != ApplicationStatus.PLACED:
                 application.status = ApplicationStatus.REJECTED
                 application.feedback = 'Automatically rejected: the company was blacklisted.'
+                affected.append(application)
     db.session.commit()
     cache.clear()
+    for application in affected:
+        notify_application_update(application)
     return jsonify(company_to_dict(company))
 
 
@@ -366,12 +371,16 @@ def cancel_drive(drive_id):
     if drive.status != PlacementDriveStatus.APPROVED:
         return error('Only approved drives can be cancelled.')
     drive.status = PlacementDriveStatus.CANCELLED
+    affected = []
     for application in drive.applications:
         if application.status in ACTIVE_APPLICATION_STATUSES:
             application.status = ApplicationStatus.REJECTED
             application.feedback = 'Automatically rejected: the placement drive was cancelled.'
+            affected.append(application)
     db.session.commit()
     cache.clear()
+    for application in affected:
+        notify_application_update(application)
     return jsonify(drive_to_dict(drive))
 
 
@@ -438,7 +447,13 @@ def update_application(application_id):
     if 'status' in data:
         if data['status'] not in ApplicationStatus.__members__:
             return error('Invalid application status.')
-        application.status = ApplicationStatus[data['status']]
+        new_status = ApplicationStatus[data['status']]
+        # A placement record is created once when an offer is accepted; moving the
+        # application away from PLACED would orphan that record and let a later
+        # accept-offer attempt collide with it (Placement.application_id is unique).
+        if application.placement and new_status != ApplicationStatus.PLACED:
+            return error('This application already has a placement record and cannot be moved out of Placed.')
+        application.status = new_status
     if 'feedback' in data:
         application.feedback = data['feedback'] or None
     if 'offered_salary' in data:
@@ -456,6 +471,7 @@ def update_application(application_id):
 
     db.session.commit()
     cache.clear()
+    notify_application_update(application)
     return jsonify(application_to_dict(application))
 
 
@@ -657,4 +673,5 @@ def update_interview(interview_id):
 
     db.session.commit()
     cache.clear()
+    notify_application_update(interview.application)
     return jsonify(interview_to_dict(interview))

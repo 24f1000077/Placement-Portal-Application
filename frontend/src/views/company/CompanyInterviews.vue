@@ -16,7 +16,7 @@
     <div class="pp-card">
       <table class="table pp-table mb-0 align-middle">
         <thead>
-          <tr><th>Candidate</th><th>Drive</th><th>Scheduled</th><th>Interviewer</th><th>Notes</th><th>Status</th></tr>
+          <tr><th>Candidate</th><th>Drive</th><th>Scheduled</th><th>Interviewer</th><th>Notes</th><th>Status</th><th>Join</th></tr>
         </thead>
         <tbody>
           <tr v-for="iv in interviews" :key="iv.id">
@@ -26,8 +26,12 @@
             <td>{{ iv.interviewer_name || '—' }}</td>
             <td>{{ iv.notes || '—' }}</td>
             <td><StatusBadge :status="iv.status" /></td>
+            <td>
+              <a v-if="iv.meeting_link" :href="iv.meeting_link" target="_blank" class="btn btn-sm btn-primary">Join</a>
+              <span v-else class="text-muted">—</span>
+            </td>
           </tr>
-          <tr v-if="!interviews.length"><td colspan="6" class="text-center text-muted py-4">No interviews scheduled.</td></tr>
+          <tr v-if="!interviews.length"><td colspan="7" class="text-center text-muted py-4">No interviews scheduled.</td></tr>
         </tbody>
       </table>
     </div>

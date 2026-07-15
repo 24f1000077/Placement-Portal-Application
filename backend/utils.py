@@ -4,11 +4,14 @@ from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
-def role_required(*roles):
+def role_required(*roles, locations=None):
     # Route decorator: requires a valid JWT, one of the given role claims, and an active account, checked fresh on every request (not just at login).
+    # `locations` lets one route (e.g. an SSE stream) accept the JWT from the query string instead of the Authorization header, since EventSource can't set custom headers; every other route keeps the header-only default.
+    require_jwt = jwt_required(locations=locations) if locations else jwt_required()
+
     def decorator(fn):
         @wraps(fn)
-        @jwt_required()
+        @require_jwt
         def wrapper(*args, **kwargs):
             claims = get_jwt()
             if claims.get('role') not in roles:
