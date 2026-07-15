@@ -112,15 +112,15 @@ def run():
         seed_admin()
         db.session.commit()
 
-        # One company per CompanyStatus value, so every admin approval state has an example.
         acme = make_company('HR Priya', 'company1@placement.com', 'Acme Corp', 'Software', 'https://acme.example.com', CompanyStatus.APPROVED)
         beta = make_company('HR Rohan', 'company2@placement.com', 'Beta Inc', 'Finance', 'https://beta.example.com', CompanyStatus.APPROVED)
         make_company('HR Neha', 'company3@placement.com', 'Gamma Tech', 'Analytics', 'https://gamma.example.com', CompanyStatus.PENDING)
         make_company('HR Karan', 'company4@placement.com', 'Delta Systems', 'Hardware', 'https://delta.example.com', CompanyStatus.REJECTED)
         make_company('HR Simran', 'company5@placement.com', 'Epsilon Labs', 'Biotech', 'https://epsilon.example.com', CompanyStatus.BLACKLISTED)
+        make_company('HR Ansh', 'company6@placement.com', 'A-Systems', 'IT', 'https://asystems.example.com', CompanyStatus.PENDING)
+        make_company('HR Kaustubh', 'company7@placement.com', 'EdTech Foundation', 'IT', 'https://edtech.example.com', CompanyStatus.PENDING)
         db.session.commit()
 
-        # Ten students spanning every branch, a range of CGPAs/graduation years, and one blacklisted.
         students = [
             make_student('Aarav Shah', 'student1@placement.com', 'Computer Science', 8.7, 2027, StudentStatus.APPROVED, 'Python, React, SQL'),
             make_student('Diya Mehta', 'student2@placement.com', 'Information Technology', 7.9, 2027, StudentStatus.APPROVED, 'Java, Spring, AWS'),
@@ -135,7 +135,6 @@ def run():
         ]
         db.session.commit()
 
-        # Seven drives across both companies, one per PlacementDriveStatus value.
         d_swe = make_drive(acme, 'Software Engineer', PlacementDriveStatus.APPROVED, 7.0, 2027, ['Computer Science', 'Information Technology'], 30, 'Python, React, SQL', 1200000)
         d_data = make_drive(acme, 'Data Analyst', PlacementDriveStatus.PENDING, 6.5, 2028, ['Computer Science'], 25, 'SQL, Excel', 900000)
         d_devops = make_drive(acme, 'DevOps Engineer', PlacementDriveStatus.APPLICATIONS_CLOSED, 7.5, 2027, ['Computer Science', 'Information Technology'], 10, 'Docker, AWS', 1100000)
@@ -143,11 +142,13 @@ def run():
         d_backend = make_drive(acme, 'Backend Developer', PlacementDriveStatus.REJECTED, 7.0, 2027, ['Computer Science'], 20, 'Node.js', 1000000)
         d_pm = make_drive(beta, 'Product Manager', PlacementDriveStatus.APPROVED, 8.0, 2027, ['Computer Science', 'Information Technology', 'Electronics & Communication'], 40, 'Product Strategy', 1500000)
         d_qa = make_drive(beta, 'QA Engineer', PlacementDriveStatus.APPROVED, 6.0, 2028, ['Computer Science', 'Electrical Engineering'], 35, 'Selenium, Testing', 800000)
+        d_frame = make_drive(acme, 'Framework Manager', PlacementDriveStatus.PENDING, 8.5, 2028, ['Computer Science'], 25, 'SQL, Excel', 900000)
+        d_cloud = make_drive(acme, 'Cloud Solutions Architect', PlacementDriveStatus.PENDING, 8.5, 2028, ['Computer Science'], 25, 'AWS, Azure', 900000)
+
+
         # Drive to test send_daily_reminders (deadline in the next 48 hours)
-        d_reminder = make_drive(
-            acme, 'QA Automation Engineer', PlacementDriveStatus.APPROVED, 6.5, 2027,
-            ['Computer Science', 'Information Technology'], 1.5, 'Python, Selenium', 950000
-        )
+        d_reminder = make_drive(acme, 'QA Automation Engineer', PlacementDriveStatus.APPROVED, 6.5, 2027, ['Computer Science', 'Information Technology'], 1.5, 'Python, Selenium', 950000)
+        d_ineligible = make_drive(beta, 'Senior Hardware Engineer', PlacementDriveStatus.APPROVED, 7.0, 2027, ['Mechanical Engineering'], 30, 'AutoCAD', 1000000)
         db.session.commit()
 
         aarav, diya, kabir, isha, vivaan, ananya, reyansh, myra, arjun, sara = students

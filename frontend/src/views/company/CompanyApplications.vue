@@ -62,7 +62,6 @@
             <button class="btn btn-sm btn-primary" @click="openOffer">Make an Offer</button>
           </template>
           <button v-if="['OFFER', 'PLACED'].includes(detail.status)" class="btn btn-sm btn-outline-secondary" @click="viewOfferOpen = true">View Offer</button>
-          <button v-if="['APPLIED','SHORTLISTED','INTERVIEW','OFFER'].includes(detail.status)" class="btn btn-sm btn-outline-danger" @click="setStatus('REJECTED')">Reject</button>
         </div>
 
         <div class="mt-4" v-if="detail.interviews.length">
