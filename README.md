@@ -341,7 +341,9 @@ PMS/
 2. **Problem:** A "Graduation Year" filter showed a list of blank, unlabeled checkboxes, and clicking any one of them selected all of them at once. **Resolution:** The shared `MultiSelectDropdown` component only recognized `string` options as plain values; a `number` (e.g. `2027`) fell through to `opt.value`/`opt.label`, both `undefined`, for every option — so all checkboxes compared equal to the same `undefined`. Fixed the component to treat any non-object primitive (string or number) as a plain value.
     
 3. **Problem:** Adding required columns to existing tables (e.g. splitting `target_year` into `min_target_year`/`max_target_year`) didn't error at startup, but every drive-related request then failed with "no such column." **Resolution:** The project has no migration tool (no Alembic); `db.create_all()` only creates tables that don't exist yet — it never alters an existing table's columns. For this dev/demo setup, the fix each time was to delete the SQLite file and reseed from scratch after a schema change. A production version of this app would need real migrations.
-
+    
+4. **Problem:** Registration forms had `required`, `pattern`, and range attributes on every field, but you could submit completely empty forms without any client-side warning. **Resolution:** The `<form novalidate>` attribute disables the browser's entire constraint-validation engine — so those attributes were pure decoration. Only the backend was ever actually checking them, after a full round-trip. Removed `novalidate` so native validation runs live, and added explicit input filtering (stripping non-digits) on phone number fields, since native validation alone can't prevent bad characters from being typed.
+ 
 ---
 
 ## Troubleshooting
