@@ -343,7 +343,10 @@ PMS/
 3. **Problem:** Adding required columns to existing tables (e.g. splitting `target_year` into `min_target_year`/`max_target_year`) didn't error at startup, but every drive-related request then failed with "no such column." **Resolution:** The project has no migration tool (no Alembic); `db.create_all()` only creates tables that don't exist yet — it never alters an existing table's columns. For this dev/demo setup, the fix each time was to delete the SQLite file and reseed from scratch after a schema change. A production version of this app would need real migrations.
     
 4. **Problem:** Registration forms had `required`, `pattern`, and range attributes on every field, but you could submit completely empty forms without any client-side warning. **Resolution:** The `<form novalidate>` attribute disables the browser's entire constraint-validation engine — so those attributes were pure decoration. Only the backend was ever actually checking them, after a full round-trip. Removed `novalidate` so native validation runs live, and added explicit input filtering (stripping non-digits) on phone number fields, since native validation alone can't prevent bad characters from being typed.
- 
+    
+5. **Problem:** After adding an admin action to blacklist a company, a company that was already logged in kept full dashboard access until their token naturally expired (up to 8 hours later). **Resolution:** JWTs are stateless and were never re-checked against the database after login. Added a live `is_active` check inside the shared `role_required` decorator so every authenticated request — not just login — re-validates the account hasn't been deactivated since the token was issued.
+
+
 ---
 
 ## Troubleshooting
