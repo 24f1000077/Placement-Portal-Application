@@ -347,7 +347,10 @@ PMS/
 5. **Problem:** After adding an admin action to blacklist a company, a company that was already logged in kept full dashboard access until their token naturally expired (up to 8 hours later). **Resolution:** JWTs are stateless and were never re-checked against the database after login. Added a live `is_active` check inside the shared `role_required` decorator so every authenticated request — not just login — re-validates the account hasn't been deactivated since the token was issued.
     
 6. **Problem:** A company reviewing an applicant's CGPA/skills/resume would sometimes see different data days later for the same application, because the student had since edited their profile. **Resolution:** Application detail views were reading the student's _live_ profile instead of what was true at application time. Added a point-in-time snapshot (CGPA, skills, experience, resume) copied onto the `Application` row itself at the moment a student applies, and switched every view/download to read from that snapshot instead of the live profile.
+    
+7. **Problem:** Renaming a CSV export's filename in the backend Celery task had no visible effect — the browser kept saving it under the old name. **Resolution:** The actual download filename wasn't coming from the backend at all. The frontend fetches the file as a raw blob (via axios) and creates its own local object URL with a hardcoded `download` attribute on a synthetic link — this discards any filename the server suggested. Had to trace the full path (Celery task → Flask `send_file` → axios blob response → frontend download helper) and fix the filename at the actual point of control: the frontend call site.
  
+
 ---
 
 ## Troubleshooting
