@@ -337,7 +337,11 @@ PMS/
 
 
 1. **Problem:** Running the backend with `python app.py` intermittently crashed every cached admin/company/student list endpoint with `AttributeError: 'Cache' object has no attribute 'app'`. **Resolution:** Running a script directly makes Python treat it as the `__main__` module. Since other files do `from app import cache`, that import re-executes `app.py` a second time under a _different_ module name, creating a second, uninitialized `Cache()` instance. Switched to `flask run` (with `FLASK_APP` set via `backend/.flaskenv`), which the Flask CLI always imports consistently as `app`, so there's only ever one `cache` instance.
- 
+    
+2. **Problem:** A "Graduation Year" filter showed a list of blank, unlabeled checkboxes, and clicking any one of them selected all of them at once. **Resolution:** The shared `MultiSelectDropdown` component only recognized `string` options as plain values; a `number` (e.g. `2027`) fell through to `opt.value`/`opt.label`, both `undefined`, for every option — so all checkboxes compared equal to the same `undefined`. Fixed the component to treat any non-object primitive (string or number) as a plain value.
+    
+3. **Problem:** Adding required columns to existing tables (e.g. splitting `target_year` into `min_target_year`/`max_target_year`) didn't error at startup, but every drive-related request then failed with "no such column." **Resolution:** The project has no migration tool (no Alembic); `db.create_all()` only creates tables that don't exist yet — it never alters an existing table's columns. For this dev/demo setup, the fix each time was to delete the SQLite file and reseed from scratch after a schema change. A production version of this app would need real migrations.
+
 ---
 
 ## Troubleshooting
